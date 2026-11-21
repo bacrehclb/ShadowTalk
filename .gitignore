@@ -16,3 +16,5 @@
 !.env.example
 /data/
 /run/
+profile.json
+.profile-*.tmp
