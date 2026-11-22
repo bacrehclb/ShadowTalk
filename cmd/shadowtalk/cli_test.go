@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"errors"
+	"github.com/bacrehclb/ShadowTalk/internal/app"
+	"github.com/bacrehclb/ShadowTalk/internal/identity"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -11,12 +13,18 @@ import (
 )
 
 func invoke(args ...string) (int, string, string) {
+	return invokeWithKeys(make(memoryKeys), args...)
+}
+
+func invokeWithKeys(keys app.EncryptionKeys, args ...string) (int, string, string) {
 	var stdout, stderr bytes.Buffer
-	code := run(args, &stdout, &stderr)
+	code := runWithKeys(args, &stdout, &stderr, keys)
 	return code, stdout.String(), stderr.String()
 }
 
 func TestProfileLifecycle(t *testing.T) {
+	keys := make(memoryKeys)
+	invoke := func(args ...string) (int, string, string) { return invokeWithKeys(keys, args...) }
 	directory := filepath.Join(t.TempDir(), "profile with spaces")
 	base := []string{"--profile-dir", directory, "profile"}
 	code, stdout, stderr := invoke(append(base, "create", "--nick", "Ivan_01")...)
@@ -70,6 +78,8 @@ func TestHelpDoesNotAccessProfile(t *testing.T) {
 		{"profile", "--help"},
 		{"profile", "create", "--help"},
 		{"profile", "show", "--help"},
+		{"profile", "upgrade", "--help"},
+		{"profile", "recover", "--help"},
 	} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			directory := filepath.Join(t.TempDir(), "missing")
@@ -83,6 +93,18 @@ func TestHelpDoesNotAccessProfile(t *testing.T) {
 		})
 	}
 }
+
+type memoryKeys map[string][]byte
+
+func (m memoryKeys) Get(id string) ([]byte, error) {
+	key, ok := m[id]
+	if !ok {
+		return nil, identity.ErrEncryptionKeyNotFound
+	}
+	return bytes.Clone(key), nil
+}
+func (m memoryKeys) Set(id string, key []byte) error { m[id] = bytes.Clone(key); return nil }
+func (m memoryKeys) Delete(id string) error          { delete(m, id); return nil }
 
 func TestCorruptProfileIsReportedAndPreserved(t *testing.T) {
 	directory := t.TempDir()

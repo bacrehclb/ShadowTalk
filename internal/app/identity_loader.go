@@ -36,10 +36,14 @@ func (l *IdentityLoader) Load() (identity.KeyPair, error) {
 	if err != nil {
 		return identity.KeyPair{}, fmt.Errorf("load identity seed: %w", err)
 	}
+	return restoreIdentity(keyID, encryptedSeed, l.keys)
+}
+
+func restoreIdentity(keyID string, encryptedSeed []byte, keys EncryptionKeyReader) (identity.KeyPair, error) {
 	if err := identity.ValidateEncryptionKeyID(keyID); err != nil {
 		return identity.KeyPair{}, fmt.Errorf("load identity seed: %w", err)
 	}
-	key, err := l.keys.Get(keyID)
+	key, err := keys.Get(keyID)
 	defer clear(key)
 	if err != nil {
 		return identity.KeyPair{}, fmt.Errorf("load identity encryption key: %w", err)

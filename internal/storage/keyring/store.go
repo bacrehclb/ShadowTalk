@@ -16,7 +16,7 @@ const service = "ShadowTalk/seed-encryption/v1"
 
 var (
 	ErrInvalidKeyID      = identity.ErrInvalidEncryptionKeyID
-	ErrNotFound          = errors.New("encryption key not found in system key store")
+	ErrNotFound          = identity.ErrEncryptionKeyNotFound
 	ErrUnavailable       = errors.New("system key store access failed")
 	ErrInvalidStoredKey  = errors.New("invalid encryption key in system key store")
 	ErrWriteUnconfirmed  = errors.New("system key store write could not be verified")
@@ -53,6 +53,7 @@ func (s *Store) Set(id string, key []byte) error {
 		return fmt.Errorf("set encryption key: %w", ErrUnavailable)
 	}
 	stored, err := s.Get(id)
+	defer clear(stored)
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrWriteUnconfirmed, err)
 	}
