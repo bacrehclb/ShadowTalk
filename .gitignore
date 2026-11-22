@@ -22,3 +22,5 @@ identity-seed.json
 .identity-seed-*.tmp
 profile-pending.json
 .profile.lock
+.shadowtalk.lock
+.shadowtalk-run-*/
