@@ -80,6 +80,9 @@ func TestInvalidInputDoesNotAccessSystemStore(t *testing.T) {
 		if got, err := store.Get(id); got != nil || !errors.Is(err, ErrInvalidKeyID) {
 			t.Fatalf("Get returned %v, want ErrInvalidKeyID and no key", err)
 		}
+		if err := store.Delete(id); !errors.Is(err, ErrInvalidKeyID) {
+			t.Fatalf("Delete returned %v, want ErrInvalidKeyID", err)
+		}
 	}
 	for _, size := range []int{0, 16, 24, 31, 33, 64} {
 		if err := store.Set("key-1", make([]byte, size)); !errors.Is(err, identity.ErrInvalidEncryptionKeySize) {

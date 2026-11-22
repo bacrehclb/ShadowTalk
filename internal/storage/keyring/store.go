@@ -15,24 +15,26 @@ import (
 const service = "ShadowTalk/seed-encryption/v1"
 
 var (
-	ErrInvalidKeyID     = identity.ErrInvalidEncryptionKeyID
-	ErrNotFound         = errors.New("encryption key not found in system key store")
-	ErrUnavailable      = errors.New("system key store access failed")
-	ErrInvalidStoredKey = errors.New("invalid encryption key in system key store")
-	ErrWriteUnconfirmed = errors.New("system key store write could not be verified")
+	ErrInvalidKeyID      = identity.ErrInvalidEncryptionKeyID
+	ErrNotFound          = errors.New("encryption key not found in system key store")
+	ErrUnavailable       = errors.New("system key store access failed")
+	ErrInvalidStoredKey  = errors.New("invalid encryption key in system key store")
+	ErrWriteUnconfirmed  = errors.New("system key store write could not be verified")
+	ErrDeleteUnconfirmed = errors.New("system key store deletion could not be verified")
 )
 
 // Store addresses keys by a stable, non-secret ID supplied by the caller.
 // IDs must not be nicknames: nicknames can change and are not unique.
 // Construct a Store with New; its zero value is not usable.
 type Store struct {
-	set func(service, account, secret string) error
-	get func(service, account string) (string, error)
+	set    func(service, account, secret string) error
+	get    func(service, account string) (string, error)
+	remove func(service, account string) error
 }
 
 // New creates an adapter without accessing the system key store.
 func New() *Store {
-	return &Store{set: oskeyring.Set, get: oskeyring.Get}
+	return &Store{set: oskeyring.Set, get: oskeyring.Get, remove: oskeyring.Delete}
 }
 
 // Set writes a separate, cryptographically random seed encryption key and
@@ -81,4 +83,30 @@ func (s *Store) Get(id string) ([]byte, error) {
 		return nil, ErrInvalidStoredKey
 	}
 	return key, nil
+}
+
+// Delete removes only the entry addressed by ID. An already missing entry is
+// a success. Otherwise, deletion is verified by checking that the entry is gone.
+// Callers must coordinate writes and must not delete a key needed by a saved
+// seed. An error does not guarantee that the entry still exists.
+func (s *Store) Delete(id string) error {
+	if err := identity.ValidateEncryptionKeyID(id); err != nil {
+		return err
+	}
+	if err := s.remove(service, id); err != nil {
+		if errors.Is(err, oskeyring.ErrNotFound) {
+			return nil
+		}
+		return fmt.Errorf("delete encryption key: %w", ErrUnavailable)
+	}
+	// Check presence without decoding: even a malformed entry means deletion
+	// did not complete. Neither returned data nor backend error text is exposed.
+	_, err := s.get(service, id)
+	if errors.Is(err, oskeyring.ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrDeleteUnconfirmed, ErrUnavailable)
+	}
+	return ErrDeleteUnconfirmed
 }
