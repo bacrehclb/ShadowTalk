@@ -13,7 +13,8 @@ var (
 )
 
 // KeyPair holds an Ed25519 identity in memory. It is created by GenerateKeyPair
-// or RestoreKeyPair. Private key material is exported only through Seed.
+// or RestoreKeyPair. Seed exports the profile secret; OnionServiceSeed derives
+// a separate Tor service secret. Neither should be logged or shared.
 type KeyPair struct {
 	publicKey  ed25519.PublicKey
 	privateKey ed25519.PrivateKey
