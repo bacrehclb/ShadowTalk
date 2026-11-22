@@ -47,6 +47,9 @@ func TestProfileLifecycle(t *testing.T) {
 
 func TestRejectedCommandsDoNotCreateProfile(t *testing.T) {
 	for _, args := range [][]string{
+		{"ui"},
+		{"ui", "extra"},
+		{"ui", "--nick", "ivan"},
 		{"profile", "create"},
 		{"profile", "create", "--nick", "bad.name"},
 		{"profile", "create", "--nick", "ivan", "extra"},
@@ -72,6 +75,7 @@ func TestRejectedCommandsDoNotCreateProfile(t *testing.T) {
 
 func TestHelpDoesNotAccessProfile(t *testing.T) {
 	for _, args := range [][]string{
+		{"ui", "--help"},
 		{},
 		{"--help"},
 		{"profile"},

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/bacrehclb/ShadowTalk/internal/identity"
 	"github.com/bacrehclb/ShadowTalk/internal/storage/profilefile"
+	"github.com/charmbracelet/x/term"
 )
 
 // This file-only fake exists exclusively in the test binary. The production CLI
@@ -70,12 +72,47 @@ func TestCLIChildProcess(t *testing.T) {
 		crashAfterSet: os.Getenv("SHADOWTALK_TEST_CRASH") == "1",
 		deny:          os.Getenv("SHADOWTALK_TEST_DENY") == "1",
 	}
+	if os.Getenv("SHADOWTALK_TEST_TERMINAL") == "1" {
+		// Check before exiting: macOS may revoke the PTY slave when its session
+		// leader exits, so the parent cannot reliably inspect termios afterward.
+		terminal := os.Stdin
+		if !term.IsTerminal(terminal.Fd()) {
+			terminal = os.Stdout
+		}
+		before, err := term.GetState(terminal.Fd())
+		if err != nil {
+			os.Exit(92)
+		}
+		code := runWithKeys(args[1:], os.Stdout, os.Stderr, keys)
+		after, err := term.GetState(terminal.Fd())
+		if err != nil || !reflect.DeepEqual(before, after) {
+			os.Exit(93)
+		}
+		os.Exit(code)
+	}
 	os.Exit(runWithKeys(args[1:], os.Stdout, os.Stderr, keys))
 }
 
 type processResult struct {
 	code            int
 	out, diagnostic string
+}
+
+func TestUIWithPipesFailsWithoutReadingOrCreatingProfile(t *testing.T) {
+	work, keys := t.TempDir(), t.TempDir()
+	profile := filepath.Join(work, "missing")
+	base := []string{"--profile-dir", profile, "ui"}
+	help := runCLIProcess(t, work, keys, nil, append(base, "--help")...)
+	if help.code != 0 || help.diagnostic != "" || !strings.Contains(help.out, "shadowtalk") {
+		t.Fatalf("ui help: %+v", help)
+	}
+	result := runCLIProcess(t, work, keys, nil, base...)
+	if result.code != 1 || result.out != "" || !strings.Contains(result.diagnostic, "терминальные stdin и stdout") {
+		t.Fatalf("ui pipe: %+v", result)
+	}
+	if _, err := os.Stat(profile); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatal("UI created profile without terminal")
+	}
 }
 
 func runCLIProcess(t *testing.T, work, keys string, extraEnv []string, args ...string) processResult {

@@ -16,16 +16,19 @@ import (
 	"github.com/bacrehclb/ShadowTalk/internal/storage/profiledir"
 	"github.com/bacrehclb/ShadowTalk/internal/storage/profilefile"
 	"github.com/bacrehclb/ShadowTalk/internal/storage/seedfile"
+	"github.com/bacrehclb/ShadowTalk/internal/tui"
 )
 
 const usage = `ShadowTalk — локальный профиль
 
 Использование:
+  shadowtalk [--profile-dir PATH] ui
   shadowtalk [--profile-dir PATH] profile create --nick NICK
   shadowtalk [--profile-dir PATH] profile show
   shadowtalk [--profile-dir PATH] profile upgrade
   shadowtalk [--profile-dir PATH] profile recover
 
+ui открывает терминальный интерфейс профиля (нужны терминальные stdin и stdout).
 create создаёт профиль и сохраняет ключи в системном хранилище ОС.
 show проверяет ключи и показывает отпечаток публичной идентичности.
 upgrade добавляет ключи старому профилю без изменения ника и даты создания.
@@ -34,7 +37,7 @@ recover завершает прерванное создание с сохран
 Ник: 3–24 символа; латинские буквы, цифры, _ и -.
 Первый и последний символ — буква или цифра.
 
---profile-dir задаётся перед командой profile.
+--profile-dir задаётся перед командой ui или profile.
 По умолчанию используется каталог shadowtalk внутри системного каталога
 конфигурации пользователя. --help показывает эту справку.`
 
@@ -61,8 +64,24 @@ func execute(args []string, stdout io.Writer, keys app.EncryptionKeys) error {
 		_, err := fmt.Fprintln(stdout, usage)
 		return err
 	}
-	if args[0] != "profile" {
+	if args[0] != "profile" && args[0] != "ui" {
 		return errors.New("неизвестная команда; используйте --help")
+	}
+	if args[0] == "ui" {
+		uiFlags := flag.NewFlagSet("ui", flag.ContinueOnError)
+		if err := parseFlags(uiFlags, args[1:], stdout); err != nil {
+			return err
+		}
+		if uiFlags.NArg() != 0 {
+			return errors.New("лишние аргументы; используйте ui --help")
+		}
+		path, err := profileDirectory(*directory)
+		if err != nil {
+			return err
+		}
+		output, _ := stdout.(*os.File)
+		profiles := app.NewProfiles(profiledir.New(path), keys)
+		return tui.Run(profileUI{profiles}, os.Stdin, output, tui.Options{Directory: path, DescribeError: userError})
 	}
 	if len(args) == 1 || args[1] == "--help" || args[1] == "-h" {
 		_, err := fmt.Fprintln(stdout, usage)
@@ -85,14 +104,11 @@ func execute(args []string, stdout io.Writer, keys app.EncryptionKeys) error {
 		return errors.New("лишние аргументы; используйте --help")
 	}
 
-	if *directory == "" {
-		configDirectory, err := os.UserConfigDir()
-		if err != nil {
-			return fmt.Errorf("не удалось определить каталог профиля; задайте --profile-dir: %w", err)
-		}
-		*directory = filepath.Join(configDirectory, "shadowtalk")
+	path, err := profileDirectory(*directory)
+	if err != nil {
+		return err
 	}
-	profiles := app.NewProfiles(profiledir.New(*directory), keys)
+	profiles := app.NewProfiles(profiledir.New(path), keys)
 	if command == "create" {
 		profile, err := profiles.Create(nickname)
 		if err != nil {
@@ -127,6 +143,17 @@ func execute(args []string, stdout io.Writer, keys app.EncryptionKeys) error {
 	}
 	_, err = fmt.Fprint(stdout, text)
 	return err
+}
+
+func profileDirectory(directory string) (string, error) {
+	if directory != "" {
+		return directory, nil
+	}
+	configDirectory, err := os.UserConfigDir()
+	if err != nil {
+		return "", fmt.Errorf("не удалось определить каталог профиля; задайте --profile-dir: %w", err)
+	}
+	return filepath.Join(configDirectory, "shadowtalk"), nil
 }
 
 // Parse errors belong on stderr; help goes to stdout only when requested.
