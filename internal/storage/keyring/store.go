@@ -15,7 +15,7 @@ import (
 const service = "ShadowTalk/seed-encryption/v1"
 
 var (
-	ErrInvalidKeyID     = errors.New("key ID must contain 1 to 128 ASCII letters, digits, underscores or hyphens")
+	ErrInvalidKeyID     = identity.ErrInvalidEncryptionKeyID
 	ErrNotFound         = errors.New("encryption key not found in system key store")
 	ErrUnavailable      = errors.New("system key store access failed")
 	ErrInvalidStoredKey = errors.New("invalid encryption key in system key store")
@@ -40,8 +40,8 @@ func New() *Store {
 // Callers must coordinate writes and must not replace a key still needed to
 // decrypt a saved seed. An error does not guarantee that no write took place.
 func (s *Store) Set(id string, key []byte) error {
-	if !validKeyID(id) {
-		return ErrInvalidKeyID
+	if err := identity.ValidateEncryptionKeyID(id); err != nil {
+		return err
 	}
 	if len(key) != identity.SeedEncryptionKeySize {
 		return identity.ErrInvalidEncryptionKeySize
@@ -63,8 +63,8 @@ func (s *Store) Set(id string, key []byte) error {
 // Get returns a fresh 32-byte slice, or nil on error. Missing, inaccessible and
 // malformed entries are distinct errors; Get never creates or repairs a key.
 func (s *Store) Get(id string) ([]byte, error) {
-	if !validKeyID(id) {
-		return nil, ErrInvalidKeyID
+	if err := identity.ValidateEncryptionKeyID(id); err != nil {
+		return nil, err
 	}
 	encoded, err := s.get(service, id)
 	if err != nil {
@@ -81,18 +81,4 @@ func (s *Store) Get(id string) ([]byte, error) {
 		return nil, ErrInvalidStoredKey
 	}
 	return key, nil
-}
-
-func validKeyID(id string) bool {
-	if len(id) == 0 || len(id) > 128 {
-		return false
-	}
-	for i := 0; i < len(id); i++ {
-		c := id[i]
-		if c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_' || c == '-' {
-			continue
-		}
-		return false
-	}
-	return true
 }

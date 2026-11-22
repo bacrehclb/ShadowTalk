@@ -18,3 +18,5 @@
 /run/
 profile.json
 .profile-*.tmp
+identity-seed.json
+.identity-seed-*.tmp
