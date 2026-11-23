@@ -32,7 +32,7 @@
 
 ShadowTalk is an open-source terminal messenger in development. The goal is simple: create a local identity, exchange invitations with someone you trust, and communicate through Tor onion services without a shared ShadowTalk server. A nickname is a display name; your cryptographic key is your identity.
 
-> **Early development:** profiles, signed invitations and local contacts are available. Sending messages, chat screens and message history are not implemented yet.
+> **Early development:** profiles, signed invitations and local contacts are available. The chat core supports live text exchange, but terminal chat screens and message history are not available yet.
 >
 > The features and commands below describe the **[dev branch](https://github.com/bacrehclb/ShadowTalk/tree/dev)**. `main` currently contains an earlier code snapshot; use `dev` to try the current implementation.
 
@@ -49,6 +49,7 @@ ShadowTalk is an open-source terminal messenger in development. The goal is simp
 | Tor transport | Managed Tor process and stable v3 onion address |
 | Peer sessions | Core API connecting profiles, contacts, Tor and TLS, with connection limits and cancellation |
 | Message protocol | Versioned text and acknowledgement frames, random message IDs and strict size limits; storage and delivery are pending |
+| Chat core | Live conversations, text sending/receiving, bounded events and connection lifecycle; no automatic ACKs or retries |
 
 The network core is not connected to CLI/TUI commands yet. Local integration tests cover saved profiles, invitations and framed messages through TLS and simulated Tor processes; a complete exchange over the public Tor network has **not yet been verified**. The core uses a contact snapshot until restart. See the [Tor validation notes](https://github.com/bacrehclb/ShadowTalk/blob/dev/docs/tor.md).
 
@@ -167,9 +168,10 @@ The private seed is encrypted in `identity-seed.json`; its encryption key stays 
 - [x] Signed invitations and confirmed local contacts
 - [x] Connect profiles, contacts, Tor and TLS in the peer-session core
 - [x] Bounded text and acknowledgement wire protocol
+- [x] Live one-to-one chat core and events for the interface
 - [ ] Connect peer sessions to CLI/TUI commands
 - [ ] Verify a complete exchange over the public Tor network
-- [ ] One-to-one messaging and a terminal chat screen
+- [ ] Terminal chat screen
 - [ ] Local message history, acknowledgements and delivery retries
 - [ ] Release packaging for Windows, macOS and Linux
 
@@ -185,6 +187,7 @@ internal/
   app/                  Profile, contact and network startup use cases
   identity/             Nicknames, identity keys and onion-key derivation
   contacts/             Signed invitations and contact rules
+  chat/                 Live conversations, text exchange and application events
   peers/                Authenticated streams, connection limits and lifecycle
   protocol/             Message framing, IDs, versions and size limits
   onion/                Onion v3 address format
@@ -237,7 +240,7 @@ SHADOWTALK_NATIVE_KEYRING_TEST=1 go test ./cmd/shadowtalk -run '^TestNativeKeySt
 # Real Tor controller and onion key, without joining the Tor network.
 SHADOWTALK_TOR_BINARY=/absolute/path/to/tor go test ./internal/transport/tor -run '^TestNativeTorControl$' -count=1 -v
 
-# Two peer managers and authenticated streams over the live Tor network.
+# Two chat cores exchanging messages over the live Tor network.
 SHADOWTALK_TOR_BINARY=/absolute/path/to/tor SHADOWTALK_TOR_LIVE_TEST=1 go test ./tests/integration -run '^TestTorSecureChannelLive$' -count=1 -v -timeout=7m
 ```
 

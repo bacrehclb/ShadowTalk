@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bacrehclb/ShadowTalk/internal/chat"
 	"github.com/bacrehclb/ShadowTalk/internal/contacts"
 	"github.com/bacrehclb/ShadowTalk/internal/identity"
 	"github.com/bacrehclb/ShadowTalk/internal/peers"
-	"github.com/bacrehclb/ShadowTalk/internal/protocol"
 	"github.com/bacrehclb/ShadowTalk/internal/transport/tor"
 )
 
@@ -68,57 +68,68 @@ func TestTorSecureChannelLive(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Log("both Tor nodes bootstrapped and published onion descriptors")
-	id, err := protocol.NewMessageID()
+	aliceChat, err := chat.Start(ctx, liveChatSessions{alice.node}, chat.Options{WriteTimeout: time.Minute, FrameTimeout: time.Minute})
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := protocol.Frame{Type: protocol.TypeText, ID: id, Text: "Привет через Tor 👋"}
-	replyID, err := protocol.NewMessageID()
+	defer aliceChat.Close()
+	bobChat, err := chat.Start(ctx, liveChatSessions{bob.node}, chat.Options{WriteTimeout: time.Minute, FrameTimeout: time.Minute})
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantReply := protocol.Frame{Type: protocol.TypeText, ID: replyID, Text: "authenticated Tor reply"}
-	serverDone := make(chan error, 1)
-	go func() {
-		conn, err := bob.node.Accept(ctx)
-		if err != nil {
-			serverDone <- err
-			return
-		}
-		defer conn.Close()
-		if conn.Peer().PublicKey != [32]byte(aliceKeys.PublicKey()) {
-			serverDone <- errors.New("unexpected incoming peer")
-			return
-		}
-		_ = conn.SetDeadline(time.Now().Add(time.Minute))
-		message, err := protocol.NewReader(conn).ReadFrame()
-		if err == nil && message != want {
-			err = errors.New("unexpected test message")
-		}
-		if err == nil {
-			// Exercise reply framing without claiming durable storage or ack.
-			err = protocol.NewWriter(conn).WriteFrame(wantReply)
-		}
-		serverDone <- err
-	}()
-	conn, err := alice.node.Connect(ctx, "bob")
+	defer bobChat.Close()
+	outgoing, err := aliceChat.Connect(ctx, "bob")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer conn.Close()
-	if conn.Peer().PublicKey != [32]byte(bobKeys.PublicKey()) {
-		t.Fatal("unexpected outgoing peer")
-	}
-	_ = conn.SetDeadline(time.Now().Add(time.Minute))
-	if err := protocol.NewWriter(conn).WriteFrame(want); err != nil {
+	message, err := chat.NewMessage("Привет через Tor 👋")
+	if err != nil {
 		t.Fatal(err)
 	}
-	reply, err := protocol.NewReader(conn).ReadFrame()
-	if err != nil || reply != wantReply {
-		t.Fatalf("reply: %+v, %v", reply, err)
-	}
-	if err := <-serverDone; err != nil {
+	if err := outgoing.Send(ctx, message); err != nil {
 		t.Fatal(err)
 	}
-	t.Log("framed message exchange over mutually authenticated TLS through the real Tor network succeeded")
+	receive := func(service *chat.Service, message chat.Message, key [32]byte) {
+		select {
+		case e := <-service.Events():
+			if e.Kind != chat.MessageReceived || e.Message != message || e.Peer.PublicKey != key {
+				t.Fatalf("unexpected event: %+v", e)
+			}
+		case <-ctx.Done():
+			t.Fatal(ctx.Err())
+		}
+	}
+	receive(bobChat, message, [32]byte(aliceKeys.PublicKey()))
+	dialogs := bobChat.Dialogs()
+	if len(dialogs) != 1 {
+		t.Fatal("missing incoming conversation")
+	}
+	reply, err := chat.NewMessage("authenticated Tor reply")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := dialogs[0].Send(ctx, reply); err != nil {
+		t.Fatal(err)
+	}
+	receive(aliceChat, reply, [32]byte(bobKeys.PublicKey()))
+	t.Log("bidirectional chat over mutually authenticated TLS through the real Tor network succeeded")
+}
+
+// Adapt the concrete peer sessions without changing production interfaces.
+type liveChatSessions struct{ *peers.Manager }
+
+func (s liveChatSessions) Connect(ctx context.Context, alias string) (chat.Session, error) {
+	session, err := s.Manager.Connect(ctx, alias)
+	if err != nil {
+		return nil, err
+	}
+	return session, nil
+}
+
+func (s liveChatSessions) Accept(ctx context.Context) (chat.Session, error) {
+	session, err := s.Manager.Accept(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return session, nil
 }
