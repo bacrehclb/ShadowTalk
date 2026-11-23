@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"io"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,6 +13,7 @@ import (
 	"github.com/bacrehclb/ShadowTalk/internal/contacts"
 	"github.com/bacrehclb/ShadowTalk/internal/identity"
 	"github.com/bacrehclb/ShadowTalk/internal/peers"
+	"github.com/bacrehclb/ShadowTalk/internal/protocol"
 	"github.com/bacrehclb/ShadowTalk/internal/storage/contactsfile"
 	"github.com/bacrehclb/ShadowTalk/internal/storage/profiledir"
 )
@@ -104,24 +105,45 @@ func TestPeerSessionsReloadProfilesAndConnectThroughManagedTor(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	var frames []protocol.Frame
+	for _, text := range []string{"Привет через Tor 👋\nВторая строка", strings.Repeat("я", protocol.MaxTextBytes/2)} {
+		id, err := protocol.NewMessageID()
+		if err != nil {
+			t.Fatal(err)
+		}
+		frames = append(frames, protocol.Frame{Type: protocol.TypeText, ID: id, Text: text})
+	}
 	replied := make(chan error, 1)
 	go func() {
-		message := make([]byte, 5)
-		_, err := io.ReadFull(server, message)
-		if err == nil && string(message) != "hello" {
-			err = errors.New("wrong message")
+		reader, writer := protocol.NewReader(server), protocol.NewWriter(server)
+		// Exercise explicit ack encoding. Durable storage and the decision to
+		// acknowledge belong to delivery and are not implemented by this test.
+		for _, want := range frames {
+			message, err := reader.ReadFrame()
+			if err != nil {
+				replied <- err
+				return
+			}
+			if message != want {
+				replied <- errors.New("wrong protocol message")
+				return
+			}
+			if err := writer.WriteFrame(protocol.Frame{Type: protocol.TypeAck, ID: message.ID}); err != nil {
+				replied <- err
+				return
+			}
 		}
-		if err == nil {
-			_, err = server.Write([]byte("reply"))
-		}
-		replied <- err
+		replied <- nil
 	}()
-	if _, err := client.Write([]byte("hello")); err != nil {
-		t.Fatal(err)
-	}
-	reply := make([]byte, 5)
-	if _, err := io.ReadFull(client, reply); err != nil || string(reply) != "reply" {
-		t.Fatalf("reply: %q, %v", reply, err)
+	reader, writer := protocol.NewReader(client), protocol.NewWriter(client)
+	for _, frame := range frames {
+		if err := writer.WriteFrame(frame); err != nil {
+			t.Fatal(err)
+		}
+		ack, err := reader.ReadFrame()
+		if err != nil || ack != (protocol.Frame{Type: protocol.TypeAck, ID: frame.ID}) {
+			t.Fatalf("acknowledgement: %+v, %v", ack, err)
+		}
 	}
 	if err := <-replied; err != nil {
 		t.Fatal(err)
