@@ -1,136 +1,122 @@
-# ShadowTalk
+<div align="center">
 
-P2P-мессенджер на Go с терминальным интерфейсом и соединениями через Tor.
-Каждый пользователь запускает собственный узел. Общего сервера ShadowTalk нет.
+  <h1>ShadowTalk</h1>
 
-Реализован модуль локального профиля и криптографической идентичности: создание
-по нику, защищённое сохранение ключей, загрузка после перезапуска, отпечаток
-публичного ключа и восстановление незавершённого создания. Для профиля доступны
-обычные команды и интерактивный терминальный интерфейс. Также готов модуль
-защищённого соединения с проверкой ключей и транспорт через отдельный процесс Tor.
-Доступны подписанные приглашения и локальные контакты с подтверждением ключа
-через CLI. Сетевые модули проверяются отдельно; подключение диалогов к интерфейсу,
-сообщения и история — следующие этапы.
+  <p>
+    <b>A peer-to-peer messenger for your terminal.</b><br>
+    Built in Go. Designed for Tor. Identity through cryptographic keys.
+  </p>
 
-## Запуск
+  <p>
+    <a href="https://go.dev/dl/"><img src="https://img.shields.io/badge/Go-1.26%2B-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Go 1.26 or newer"></a>
+    <a href="https://github.com/bacrehclb/ShadowTalk/actions/workflows/test.yml?query=branch%3Adev"><img src="https://img.shields.io/github/actions/workflow/status/bacrehclb/ShadowTalk/test.yml?branch=dev&event=push&style=flat-square&label=tests%20%28dev%29" alt="Tests on dev"></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="MIT License"></a>
+    <br>
+    <img src="https://img.shields.io/badge/Platforms-Windows%20%7C%20macOS%20%7C%20Linux-64748b?style=flat-square" alt="Windows, macOS and Linux">
+    <img src="https://img.shields.io/badge/Status-early%20development-d97706?style=flat-square" alt="Early development">
+  </p>
 
-Нужен Go 1.26 или новее. Зависимости зафиксированы в `go.mod` и `go.sum`.
+  <p><b>English</b> · <a href="README.ru.md">Русский</a></p>
+  <p>
+    <a href="#quick-start">Quick start</a> ·
+    <a href="#usage">Usage</a> ·
+    <a href="#roadmap">Roadmap</a> ·
+    <a href="#documentation">Documentation</a>
+  </p>
 
-Интерактивный запуск:
+</div>
+
+---
+
+## Overview
+
+ShadowTalk is an open-source terminal messenger in development. The goal is simple: create a local identity, exchange invitations with someone you trust, and communicate through Tor onion services without a shared ShadowTalk server. A nickname is a display name; your cryptographic key is your identity.
+
+> **Early development:** profiles, signed invitations and local contacts are available. Sending messages, chat screens and message history are not implemented yet.
+>
+> The features and commands below describe the **[dev branch](https://github.com/bacrehclb/ShadowTalk/tree/dev)**. `main` currently contains an earlier code snapshot; use `dev` to try the current implementation.
+
+## What works today
+
+| Component | Current implementation in `dev` |
+| --- | --- |
+| Local identity | Ed25519 keys, a full SHA-256 fingerprint and a persistent profile |
+| Key storage | AES-256-GCM encrypted seed; encryption key stored in the OS credential store |
+| Terminal UI | Create, view, upgrade and recover a local profile |
+| Invitations | Signed tokens with an onion address, public key and expiration time |
+| Contacts | Local aliases, explicit fingerprint confirmation and persistent storage |
+| Secure channel | TLS 1.3 with mutual verification of the expected identity keys; tested as a separate module |
+| Tor transport | Managed Tor process and stable v3 onion address; application integration is pending |
+
+The network modules are not connected to a user-facing chat yet. Local transport tests pass; a complete exchange over the public Tor network has **not yet been verified**. See the [Tor validation notes](https://github.com/bacrehclb/ShadowTalk/blob/dev/docs/tor.md).
+
+## Quick start
+
+### Requirements
+
+- **Go 1.26 or newer** and Git to run from source.
+- **An accessible OS credential store:** Keychain on macOS, Credential Manager on Windows, or Secret Service over a user D-Bus session on Linux. Linux needs a running secret service with an available login/default collection; D-Bus alone is not enough.
+- **An interactive terminal** for the TUI, at least 40 × 20 characters.
+
+Tor is not needed for the profile and contact commands below. Testing the Tor transport requires a separate Tor executable; see the [transport guide](https://github.com/bacrehclb/ShadowTalk/blob/dev/docs/tor.md).
 
 ```sh
+git clone --branch dev https://github.com/bacrehclb/ShadowTalk.git
+cd ShadowTalk
 go run ./cmd/shadowtalk ui
 ```
 
-При первом запуске введите ник и нажмите Enter. Существующий профиль загружается
-автоматически; создание ключей старого профиля и восстановление прерванного
-создания требуют Enter на соответствующем экране. До подтверждения запись не
-выполняется. Закрытие формы нового профиля ничего не создаёт.
+Enter a nickname and press **Enter** to create your profile. On subsequent launches, ShadowTalk loads the same identity. Your OS may ask you to unlock or allow access to its credential store.
 
-| Клавиша | Действие |
+Nicknames contain **3–24 characters**: Latin letters, digits, `_` and `-`, with a letter or digit at each end. They are case-sensitive and do not need to be globally unique.
+
+| Key | Action |
 | --- | --- |
-| Enter | Действие, указанное на экране |
-| `r` | Перечитать профиль; при вводе ника это обычная буква |
-| Esc / Ctrl+C | Выйти; начатая операция с ключами сначала завершается |
+| Enter | Confirm the action shown on screen |
+| `r` | Reload the profile; while entering a nickname, type the letter normally |
+| Esc / Ctrl+C | Exit after any active key operation finishes |
 
-ОС может показать диалог доступа к хранилищу ключей. Если выход ожидает завершения
-такой операции, закройте системный диалог разрешением или отказом.
-Минимальный размер окна — 40 × 20; изменение размера не сбрасывает введённый ник.
-При маленьком окне длинные пояснения сокращаются, кнопки управления остаются видимыми.
+The interface and command output are currently in Russian. The TUI requires terminal stdin and stdout; use the regular commands below in scripts. A nonempty `NO_COLOR` disables colors.
 
-`ui` требует терминальные stdin и stdout. В pipe и при `TERM=dumb` команда
-завершается с ошибкой до чтения профиля. Непустая `NO_COLOR` отключает цвета;
-управление курсором остаётся необходимым для TUI. Запуск без аргументов по-прежнему
-показывает справку. Для другого каталога: `shadowtalk --profile-dir PATH ui`.
+## Usage
 
-Обычные команды:
+### Manage your profile
+
+If you have not created a profile through the TUI:
 
 ```sh
-go run ./cmd/shadowtalk --help
-go run ./cmd/shadowtalk profile create --nick ivan_01
+go run ./cmd/shadowtalk profile create --nick alice_01
+```
+
+View your profile and public-key fingerprint:
+
+```sh
 go run ./cmd/shadowtalk profile show
 ```
 
-`create` генерирует Ed25519-идентичность и отдельный случайный AES-256-ключ.
-Ключ шифрования сохраняется в хранилище секретов ОС, seed — в зашифрованном файле.
-Отдельного пароля ShadowTalk нет; ОС может потребовать разблокировать своё хранилище.
-`show` загружает и проверяет приватную идентичность, затем показывает ник, дату
-создания и отпечаток `SHA256:` публичного ключа. Секреты не выводятся.
+Creating a profile does not overwrite an existing one. `profile upgrade` adds keys to an older profile that only contains metadata. `profile recover` handles interrupted creation; it cannot restore a lost OS encryption key.
 
-Профиль создаётся один раз. Повторный `create` возвращает ошибку и сохраняет
-существующий файл, даже если он повреждён. Ник сохраняется без изменения
-регистра и без удаления пробелов; некорректный ввод отклоняется.
+### Exchange invitations
 
-По умолчанию файл `profile.json` находится в системном каталоге конфигурации:
-
-| ОС | Каталог профиля |
-| --- | --- |
-| macOS | `~/Library/Application Support/shadowtalk` |
-| Linux | `$XDG_CONFIG_HOME/shadowtalk` или `~/.config/shadowtalk` |
-| Windows | `%AppData%\shadowtalk` |
-
-Для отдельного тестового профиля можно явно задать каталог. Флаг указывается
-перед `profile`; каталог `data` исключён из Git.
+Create an invitation and send the resulting file to your intended contact:
 
 ```sh
-go run ./cmd/shadowtalk --profile-dir ./data/demo profile create --nick test_01
-go run ./cmd/shadowtalk --profile-dir ./data/demo profile show
+go run ./cmd/shadowtalk invite create --ttl 24h > alice.invite
 ```
 
-В каталоге профиля находятся:
+In Windows PowerShell, write the token as ASCII to avoid an encoding marker:
 
-| Файл | Назначение |
-| --- | --- |
-| `profile.json` | Версия 2: ник, время создания, публичный Ed25519-ключ |
-| `identity-seed.json` | Зашифрованный seed и ID ключа из хранилища ОС |
-| `profile-pending.json` | Журнал незавершённого создания; после успеха удаляется |
-| `.profile.lock` | Файл блокировки; его наличие не означает, что профиль занят |
-
-Если процесс прервался, используйте `profile recover` с тем же `--profile-dir`.
-Команда продолжит запись с прежними ключами. Если ключ не успел сохраниться
-и файлы идентичности ещё не опубликованы, незавершённая операция отменяется;
-можно повторить `create` или `upgrade`. При потере ключа готового профиля новая
-идентичность автоматически не создаётся.
-
-Профили старой версии 1 остаются читаемыми. Для явного добавления ключей:
-
-```sh
-go run ./cmd/shadowtalk profile upgrade
-go run ./cmd/shadowtalk profile show
+```powershell
+go run ./cmd/shadowtalk invite create --ttl 24h | Set-Content -Encoding ascii alice.invite
 ```
 
-Ник и дата создания сохраняются. Подробности — в
-[решении о создании и восстановлении](docs/decisions/0003-profile-identity-lifecycle.md).
-
-Адаптер `storage/keyring` использует
-[`go-keyring`](https://github.com/zalando/go-keyring/tree/v0.2.8): Keychain на macOS,
-Credential Manager на Windows и Secret Service через пользовательский D-Bus
-на Linux. Для Linux нужен работающий сервис секретов с доступной коллекцией
-login/default; наличие одного D-Bus недостаточно. При отказе хранилища адаптер
-возвращает ошибку; хранения открытых ключей шифрования в файле на замену нет.
-
-Адаптер `storage/seedfile` сохраняет уже зашифрованный seed в `identity-seed.json`:
-версию формата, ID ключа и шифротекст. Существующий файл не перезаписывается,
-даже если он повреждён. Формат и ограничения записи описаны в
-[решении о файле seed](docs/decisions/0002-encrypted-seed-file.md).
-
-## Приглашения и контакты
-
-Создать приглашение своего профиля и посмотреть его публичные данные:
+The recipient inspects the invitation:
 
 ```sh
-go run ./cmd/shadowtalk invite create > alice.invite
 go run ./cmd/shadowtalk invite inspect --file alice.invite
 ```
 
-Токен подписан ключом профиля и содержит ник, onion-адрес, публичный ключ,
-случайный ID и срок действия. По умолчанию — 24 часа; например, `--ttl 2h` задаёт
-2 часа. Выпуск не запускает Tor. Приватных ключей в токене нет, но он раскрывает
-адрес и идентичность — передавайте его выбранному собеседнику.
-
-Получатель проверяет токен и **сверяет полный отпечаток с отправителем по доверенному
-каналу**. Самоподпись токена не доказывает, что он принадлежит нужному человеку.
-После сверки замените `SHA256:...` полным подтверждённым значением:
+**Compare the full fingerprint with the sender through a trusted channel.** A valid signature proves ownership of a key, not the identity of the person sending you the file. After checking, replace `SHA256:...` below with the full confirmed fingerprint:
 
 ```sh
 go run ./cmd/shadowtalk contacts add --alias alice --fingerprint SHA256:... --file alice.invite
@@ -138,178 +124,151 @@ go run ./cmd/shadowtalk contacts list
 go run ./cmd/shadowtalk contacts show --alias alice
 ```
 
-`--alias` — локальное имя по правилам ника, с учётом регистра. Повторный импорт
-не меняет запись; другой ключ под занятым именем отклоняется. `--file -` читает
-один токен из stdin до EOF. В PowerShell для записи ASCII-токена без BOM можно
-использовать `go run ./cmd/shadowtalk invite create | Set-Content -Encoding ascii alice.invite`.
-Управляющие команды возвращают код 1 при ошибке, данные — в stdout, ошибки — в stderr.
+Each participant needs their own profile. Exchange invitations in both directions to prepare mutual trust. These commands only save local contacts; they do not contact the other person or open a chat.
 
-Для будущего взаимного TLS-соединения оба участника сохраняют приглашения друг
-друга. Сейчас это локальная подготовка контактов: команды не отправляют запросов
-собеседнику и не открывают чат. Токены v1 повторно используемы до истечения срока;
-одноразовое принятие и отзыв не реализованы. Сохранённые контакты не истекают
-вместе с токеном. Удаление требует имени и подтверждения существующего ключа:
+- Invitations expire after **24 hours** by default; `--ttl` accepts whole seconds from `1s` to `168h`.
+- Tokens contain public identity data, including the onion address, but no private keys. Share them deliberately.
+- Tokens can be reused until they expire. Single-use acceptance and revocation are not implemented. Saved contacts remain after token expiry.
+- `--file -` reads one token from stdin until EOF. Results go to stdout, errors to stderr; failures return exit code `1`.
+
+Remove a local contact by confirming its stored fingerprint:
 
 ```sh
 go run ./cmd/shadowtalk contacts remove --alias alice --fingerprint SHA256:...
 ```
 
-Контакты сохраняются в `contacts.json` рядом с профилем; файл содержит публичные
-данные и не зашифрован. Он привязан к публичному ключу владельца, записывается
-с блокировкой и не сбрасывается при повреждении. `list`, `show`, `add` и `remove`
-не читают приватные ключи; для подписи `invite create` нужен доступ к хранилищу ОС.
-Справка: `invite --help` и `contacts --help`. Формат и ограничения —
-в [ADR 0007](docs/decisions/0007-signed-contact-invitations.md).
+This removes the local entry; it does not revoke invitations. For command details, use `--help`, `invite --help` or `contacts --help`.
 
-## Структура
+## Local data and security
 
-`internal/securechannel` принимает уже открытое соединение и публичный ключ
-ожидаемого собеседника. Обе стороны подтверждают владение ключами профиля,
-после чего получают зашифрованный поток TLS 1.3. Модуль обрабатывает тайм-ауты,
-отмену установки соединения и ошибки транспорта; не открывает соединений сам.
-Транспорт `internal/transport/tor` запускает свой Tor, публикует постоянную
-onion v3-службу профиля и открывает соединения только через локальный SOCKS5.
-Полученные потоки передаются в `securechannel`. Приглашения и обмен сообщениями
-будут использовать эти модули отдельно.
-Контракт описан в [ADR 0005](docs/decisions/0005-pinned-tls-channel.md).
-Запуск транспорта и его ограничения — в [руководстве Tor](docs/tor.md).
+| OS | Default profile directory |
+| --- | --- |
+| macOS | `~/Library/Application Support/shadowtalk` |
+| Linux | `$XDG_CONFIG_HOME/shadowtalk` or `~/.config/shadowtalk` |
+| Windows | `%AppData%\shadowtalk` |
+
+To use a different directory, put `--profile-dir` **before** the command:
+
+```sh
+go run ./cmd/shadowtalk --profile-dir ./data/demo ui
+```
+
+The private seed is encrypted in `identity-seed.json`; its encryption key stays in the OS credential store. ShadowTalk does not use a separate application password or fall back to storing that key in plaintext. Copying the profile directory alone is **not a portable backup** of the identity.
+
+`profile.json` and `contacts.json` contain unencrypted public metadata, including contact relationships. A nickname or invitation signature does not replace fingerprint verification. This is an unfinished messenger, not a claim of security readiness; the [security notes](https://github.com/bacrehclb/ShadowTalk/blob/dev/docs/security.md) describe the mechanisms and their limits.
+
+## Roadmap
+
+- [x] Local profiles and encrypted identity storage
+- [x] Profile TUI
+- [x] Separate secure-channel and Tor transport modules
+- [x] Signed invitations and confirmed local contacts
+- [ ] Connect contacts, Tor and secure sessions in the application
+- [ ] Verify a complete exchange over the public Tor network
+- [ ] One-to-one messaging and a terminal chat screen
+- [ ] Local message history, acknowledgements and delivery retries
+- [ ] Release packaging for Windows, macOS and Linux
+
+Group rooms and a possible GUI are future directions; their scope is not committed. The terminal client comes first.
+
+## Project structure
+
+One Go module, one application binary. The current implementation lives in `dev`:
 
 ```text
-ShadowTalk/
-├── cmd/
-│   └── shadowtalk/          # точка запуска приложения
-├── internal/
-│   ├── app/                # сборка и жизненный цикл ядра
-│   ├── identity/           # профиль, ключи, идентификатор
-│   ├── contacts/           # подписанные приглашения и подтверждённые контакты
-│   ├── onion/              # формат onion v3, без процесса Tor
-│   ├── chat/               # диалоги, сообщения, правила комнат
-│   ├── delivery/           # очередь, подтверждения, повторы
-│   ├── protocol/           # формат и версии сетевых сообщений
-│   ├── transport/
-│   │   └── tor/            # onion-служба и подключения
-│   ├── securechannel/      # проверка ключей и защищённый канал
-│   ├── storage/
-│   │   ├── keyring/        # ключ шифрования seed в хранилище ОС
-│   │   ├── contactsfile/   # локальная книга контактов с блокировкой
-│   │   ├── profiledir/     # блокировка, журнал и согласование файлов
-│   │   ├── profilefile/     # метаданные профиля в JSON
-│   │   ├── seedfile/       # зашифрованный seed и ID ключа
-│   │   └── sqlite/
-│   │       └── migrations/ # изменения схемы локальной БД
-│   └── tui/                # экраны, компоненты, клавиши
-├── docs/
-│   ├── overview.md         # назначение и сценарии
-│   ├── architecture.md     # границы компонентов
-│   ├── protocol.md         # заметки по протоколу
-│   ├── security.md         # требования к защите данных
-│   └── decisions/          # записи архитектурных решений
-├── tests/
-│   └── integration/        # сценарии с несколькими узлами
-├── go.mod
-└── LICENSE
+cmd/shadowtalk/          CLI commands and application entry point
+internal/
+  app/                  Profile and contact use cases
+  identity/             Nicknames, identity keys and onion-key derivation
+  contacts/             Signed invitations and contact rules
+  onion/                Onion v3 address format
+  securechannel/        TLS with mutual identity verification
+  transport/tor/        Tor process, onion service and SOCKS connections
+  storage/              Profile files, contacts and OS credential store
+  tui/                  Terminal profile screens
+docs/                   Architecture, protocol and design decisions
+tests/integration/      Tests across module and process boundaries
 ```
 
-Пустые каталоги сохранены в Git через `.gitkeep`. При появлении содержимого
-соответствующий `.gitkeep` удаляется. Модульные тесты будут лежать рядом с кодом
-своих пакетов; `tests/integration` предназначен для общих сценариев.
+## Documentation
 
-## Навигация
+These links point to the current documentation in `dev`. Technical documents are currently written in Russian.
 
-- [Назначение и сценарии](docs/overview.md)
-- [Архитектура и правила зависимостей](docs/architecture.md)
-- [Проектирование протокола](docs/protocol.md)
-- [Защита данных](docs/security.md)
+| Document | Contents |
+| --- | --- |
+| [Project overview](https://github.com/bacrehclb/ShadowTalk/blob/dev/docs/overview.md) | Goals and user scenarios |
+| [Architecture](https://github.com/bacrehclb/ShadowTalk/blob/dev/docs/architecture.md) | Module boundaries and dependencies |
+| [Protocol](https://github.com/bacrehclb/ShadowTalk/blob/dev/docs/protocol.md) | Invitations and planned communication formats |
+| [Security](https://github.com/bacrehclb/ShadowTalk/blob/dev/docs/security.md) | Key storage, trust and limitations |
+| [Tor transport](https://github.com/bacrehclb/ShadowTalk/blob/dev/docs/tor.md) | Runtime setup, lifecycle and validation status |
+| [Design decisions](https://github.com/bacrehclb/ShadowTalk/tree/dev/docs/decisions) | Rationale behind the implementation |
 
-## Разработка
+<a id="разработка"></a>
 
-Один репозиторий, один Go-модуль, один исполняемый файл. Зависимости добавляются
-по мере реализации компонентов. Рабочие ключи, история и другие данные профиля
-должны храниться в пользовательском каталоге данных вне репозитория.
+## Development
 
-Проверки:
+Run checks from the repository root on `dev`:
 
 ```sh
-go test -race ./...
+go test ./...
 go vet ./...
-go build -o ./bin/shadowtalk ./cmd/shadowtalk
+go build ./...
 ```
 
-Тесты приглашений проверяют подпись, подмену полей, срок, строгий формат и размер.
-Формат v1 закреплён независимым образцом подписи Python `cryptography`.
-Тесты контактов проверяют подтверждение ключа, конфликты, параллельную запись
-и сохранность повреждённых файлов. Отдельные CLI-процессы проходят выпуск,
-импорт, повторный запуск и удаление. Интеграционный тест подставляет сохранённые
-контакты в взаимную проверку TLS; он не обращается в публичную сеть Tor.
+On macOS and Linux, also run `go test -race ./...`. CI runs tests, vet and builds on Windows, macOS and Linux, with the race detector enabled on macOS and Linux. Automated interactive terminal tests cover macOS and Linux; Windows terminal interaction still needs manual verification.
 
-Отдельная проверка защищённого канала между двумя процессами:
+Regular tests use temporary data and substitute key stores. They do not access your real OS secrets or the public Tor network.
 
-```sh
-go test -v ./tests/integration -run TestSecureChannelBetweenIndependentProcesses
-```
+<details>
+<summary>Optional checks with a real credential store or Tor</summary>
 
-Один процесс запускает тестовый узел на случайном порту `127.0.0.1`, второй
-проверяет его ключ и обменивается данными через TLS. Ключи создаются в памяти;
-профиль пользователя и хранилище ОС не используются. Тест требует разрешения
-на loopback-сокеты и не обращается в интернет. Это проверка канала, не сеть Tor.
-
-Обычные тесты транспорта используют отдельный подставной процесс с control/SOCKS5
-на loopback: проверяют SAFECOOKIE, тайм-ауты, аварийный выход, остановку, постоянство
-адреса и TLS между двумя узлами. Установленный Tor и интернет им не нужны.
-Настоящий Tor включается отдельно:
+These checks are opt-in. The credential-store test creates a temporary profile and removes its test key. Tor tests require a Tor executable; the live test also needs network access. The examples below use macOS/Linux shell syntax.
 
 ```sh
-# Проверка контроллера и onion-ключа без подключения к сети Tor.
-SHADOWTALK_TOR_BINARY=/absolute/path/to/tor go test -v ./internal/transport/tor -run '^TestNativeTorControl$' -count=1
-
-# Два процесса Tor, публикация служб и взаимно аутентифицированный TLS-обмен.
-SHADOWTALK_TOR_BINARY=/absolute/path/to/tor SHADOWTALK_TOR_LIVE_TEST=1 go test -v ./tests/integration -run '^TestTorSecureChannelLive$' -count=1 -timeout=7m
-```
-
-На Windows эти переменные задаются через `$env:SHADOWTALK_TOR_BINARY` и
-`$env:SHADOWTALK_TOR_LIVE_TEST = '1'` в PowerShell перед `go test`.
-Сетевой тест может завершиться по тайм-ауту при недоступности Tor. Он использует
-временные каталоги и тестовые ключи, не профиль пользователя. В CI не включён.
-
-Тесты `storage/keyring` и загрузчика идентичности используют подставное хранилище
-ключей и не читают и не меняют секреты ОС. Загрузчик также проверяется с настоящим
-файлом seed во временном каталоге. Проверки отдельных процессов покрывают перезапуск,
-конкурентное создание и аварийный выход после записи ключа.
-
-Модели TUI проверяются на всех платформах. На macOS и Linux отдельные тесты
-запускают настоящий процесс в PTY: ввод, создание, перезапуск, обновление,
-восстановление, resize, выход и восстановление режима терминала. Ключи в этих
-тестах хранятся в подставном адаптере тестового бинарника. Проверяются также
-`NO_COLOR`, `TERM=dumb` и независимое перенаправление stdin/stdout.
-Проверка интерактивного Windows-терминала пока не автоматизирована.
-
-Проверка настоящего хранилища ОС включается явно. Она создаёт одноразовый профиль
-и удаляет только его тестовый ключ. Для macOS/Linux:
-
-```sh
+# Native OS credential store; a system permission dialog may appear.
 SHADOWTALK_NATIVE_KEYRING_TEST=1 go test ./cmd/shadowtalk -run '^TestNativeKeyStoreProfileLifecycle$' -count=1 -v
+
+# Real Tor controller and onion key, without joining the Tor network.
+SHADOWTALK_TOR_BINARY=/absolute/path/to/tor go test ./internal/transport/tor -run '^TestNativeTorControl$' -count=1 -v
+
+# Two Tor nodes and a mutually authenticated TLS exchange over the live network.
+SHADOWTALK_TOR_BINARY=/absolute/path/to/tor SHADOWTALK_TOR_LIVE_TEST=1 go test ./tests/integration -run '^TestTorSecureChannelLive$' -count=1 -v -timeout=7m
 ```
 
-На Windows переменная задаётся в PowerShell через
-`$env:SHADOWTALK_NATIVE_KEYRING_TEST = '1'` перед той же командой `go test`.
-При заблокированном хранилище может потребоваться действие в системном диалоге.
-Обычные тесты и CI не обращаются к настоящим ключам ОС.
+In PowerShell, set the corresponding variables with `$env:NAME = 'value'` before running `go test`. The live Tor check can time out when the network is unavailable; it is not part of regular CI.
 
-В `.github/workflows/test.yml` подготовлены проверки на macOS, Linux и Windows.
-Реальный запуск на macOS с Keychain проверен локально; результаты CI на остальных
-ОС нужно проверить после push. Кросс-компиляция не заменяет запуск на целевой ОС.
+</details>
 
-Работа ведётся небольшими законченными шагами, которые владелец проекта
-коммитит самостоятельно:
+Build a local executable:
 
-1. Каркас репозитория — готов.
-2. Метаданные профиля, правила ника, создание и загрузка — готовы.
-3. Локальная идентичность — создание, защищённое хранение, загрузка, отпечаток,
-   обновление старого профиля и восстановление частичной записи подключены к CLI.
-4. Терминальный интерфейс профиля — готов; экран контактов ещё предстоит подключить.
-5. Защищённый канал TLS 1.3 с взаимной проверкой ключей — готов.
-6. Транспорт Tor — реализован отдельным модулем; интеграция в пользовательский сценарий впереди.
-7. Подписанные приглашения и локальные контакты с подтверждением ключей — доступны через CLI.
-8. Сообщения, история и восстановление доставки.
+```sh
+# macOS / Linux
+go build -o ./bin/shadowtalk ./cmd/shadowtalk
+./bin/shadowtalk ui
+```
 
-Объём первого релиза с комнатами остаётся предметом отдельного решения.
+```powershell
+# Windows PowerShell
+go build -o ./bin/shadowtalk.exe ./cmd/shadowtalk
+.\bin\shadowtalk.exe ui
+```
+
+## Contributing
+
+Bug reports, platform testing and focused improvements are welcome. For larger changes, open an [issue](https://github.com/bacrehclb/ShadowTalk/issues) first so we can agree on scope.
+
+1. Fork the repository and create a branch from `dev`.
+2. Keep changes focused; update relevant tests and documentation.
+3. Run the checks above and open a pull request targeting `dev`.
+
+For bug reports, include your OS, Go version, commit and reproduction steps. Keep private keys, real invitation tokens and profile files out of issues and commits.
+
+## License
+
+[MIT](LICENSE) · Copyright © 2026 1tuz.
+
+---
+
+<div align="center">
+  <a href="README.md">English</a> · <a href="README.ru.md">Русский</a>
+</div>
