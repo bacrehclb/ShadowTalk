@@ -29,10 +29,15 @@ func (p Profile) HasIdentity() bool { return p.PublicKey != [ed25519.PublicKeySi
 
 // Fingerprint is a full SHA-256 digest of the Ed25519 public key.
 func (p Profile) Fingerprint() string {
-	if !p.HasIdentity() {
+	return PublicKeyFingerprint(p.PublicKey)
+}
+
+// PublicKeyFingerprint is shared by profiles, invitations and pinned contacts.
+func PublicKeyFingerprint(publicKey [ed25519.PublicKeySize]byte) string {
+	if publicKey == [ed25519.PublicKeySize]byte{} {
 		return ""
 	}
-	digest := sha256.Sum256(p.PublicKey[:])
+	digest := sha256.Sum256(publicKey[:])
 	return "SHA256:" + hex.EncodeToString(digest[:])
 }
 
