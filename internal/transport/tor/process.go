@@ -111,7 +111,7 @@ func (p *process) connect(ctx context.Context) (net.Conn, error) {
 				p.control = conn
 				return conn, nil
 			}
-		} else if !errors.Is(err, os.ErrNotExist) {
+		} else if !canRetryPortFileRead(err) {
 			return nil, ErrControl
 		}
 		select {
