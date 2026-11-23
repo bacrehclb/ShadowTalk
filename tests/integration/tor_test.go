@@ -9,8 +9,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bacrehclb/ShadowTalk/internal/contacts"
 	"github.com/bacrehclb/ShadowTalk/internal/identity"
-	"github.com/bacrehclb/ShadowTalk/internal/securechannel"
+	"github.com/bacrehclb/ShadowTalk/internal/peers"
 	"github.com/bacrehclb/ShadowTalk/internal/transport/tor"
 )
 
@@ -32,19 +33,31 @@ func TestTorSecureChannelLive(t *testing.T) {
 		t.Fatal(err)
 	}
 	type result struct {
-		node *tor.Node
+		node *peers.Manager
 		err  error
 	}
-	start := func(keys identity.KeyPair) <-chan result {
+	start := func(keys, peerKeys identity.KeyPair, alias string) <-chan result {
 		resultCh := make(chan result, 1)
 		directory := filepath.Join(t.TempDir(), "tor")
+		address, err := peerKeys.OnionAddress()
+		if err != nil {
+			t.Fatal(err)
+		}
+		book, err := contacts.RestoreBook([32]byte(keys.PublicKey()), []contacts.Contact{{
+			Alias: alias, Nickname: alias, PublicKey: [32]byte(peerKeys.PublicKey()), Onion: address, AddedAt: time.Now().UTC(),
+		}})
+		if err != nil {
+			t.Fatal(err)
+		}
 		go func() {
-			node, err := tor.Start(ctx, keys, tor.Options{BinaryPath: os.Getenv("SHADOWTALK_TOR_BINARY"), DataDir: directory})
+			node, err := peers.Start(ctx, keys, book, peers.Options{HandshakeTimeout: time.Minute}, func(lifetime context.Context) (peers.Transport, error) {
+				return tor.Start(lifetime, keys, tor.Options{BinaryPath: os.Getenv("SHADOWTALK_TOR_BINARY"), DataDir: directory})
+			})
 			resultCh <- result{node, err}
 		}()
 		return resultCh
 	}
-	aliceCh, bobCh := start(aliceKeys), start(bobKeys)
+	aliceCh, bobCh := start(aliceKeys, bobKeys, "bob"), start(bobKeys, aliceKeys, "alice")
 	alice, bob := <-aliceCh, <-bobCh
 	for _, item := range []result{alice, bob} {
 		if item.node != nil {
@@ -55,27 +68,18 @@ func TestTorSecureChannelLive(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Log("both Tor nodes bootstrapped and published onion descriptors")
-	aliceTLS, err := securechannel.New(aliceKeys, securechannel.Options{HandshakeTimeout: time.Minute})
-	if err != nil {
-		t.Fatal(err)
-	}
-	bobTLS, err := securechannel.New(bobKeys, securechannel.Options{HandshakeTimeout: time.Minute})
-	if err != nil {
-		t.Fatal(err)
-	}
 	serverDone := make(chan error, 1)
 	go func() {
-		raw, err := bob.node.Accept()
-		if err != nil {
-			serverDone <- err
-			return
-		}
-		conn, err := bobTLS.Server(ctx, raw, aliceKeys.PublicKey())
+		conn, err := bob.node.Accept(ctx)
 		if err != nil {
 			serverDone <- err
 			return
 		}
 		defer conn.Close()
+		if conn.Peer().PublicKey != [32]byte(aliceKeys.PublicKey()) {
+			serverDone <- errors.New("unexpected incoming peer")
+			return
+		}
 		_ = conn.SetDeadline(time.Now().Add(time.Minute))
 		message := make([]byte, len("hello over Tor"))
 		if _, err = io.ReadFull(conn, message); err == nil && string(message) != "hello over Tor" {
@@ -86,15 +90,14 @@ func TestTorSecureChannelLive(t *testing.T) {
 		}
 		serverDone <- err
 	}()
-	raw, err := alice.node.Dial(ctx, bob.node.Address())
-	if err != nil {
-		t.Fatal(err)
-	}
-	conn, err := aliceTLS.Client(ctx, raw, bobKeys.PublicKey())
+	conn, err := alice.node.Connect(ctx, "bob")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer conn.Close()
+	if conn.Peer().PublicKey != [32]byte(bobKeys.PublicKey()) {
+		t.Fatal("unexpected outgoing peer")
+	}
 	_ = conn.SetDeadline(time.Now().Add(time.Minute))
 	if _, err := conn.Write([]byte("hello over Tor")); err != nil {
 		t.Fatal(err)
