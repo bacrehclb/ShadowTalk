@@ -30,7 +30,7 @@ func TestFakeControlPortPublicationIsComplete(t *testing.T) {
 					observed <- fmt.Errorf("reader observed an incomplete port record: %q", data)
 					return
 				}
-				if err != nil && !errors.Is(err, os.ErrNotExist) {
+				if err != nil && !canRetryPortFileRead(err) {
 					observed <- err
 					return
 				}
