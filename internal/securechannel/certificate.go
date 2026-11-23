@@ -43,7 +43,7 @@ func newCertificate(signer crypto.Signer, now time.Time) (tls.Certificate, error
 	return tls.Certificate{Certificate: [][]byte{der}, PrivateKey: signer, Leaf: leaf}, nil
 }
 
-func verifyPeer(state tls.ConnectionState, expected ed25519.PublicKey, usage x509.ExtKeyUsage, now time.Time) error {
+func verifyPeer(state tls.ConnectionState, expected map[[ed25519.PublicKeySize]byte]struct{}, usage x509.ExtKeyUsage, now time.Time) error {
 	if state.Version != tls.VersionTLS13 || state.NegotiatedProtocol != Protocol || state.DidResume {
 		return ErrProtocol
 	}
@@ -55,10 +55,10 @@ func verifyPeer(state tls.ConnectionState, expected ed25519.PublicKey, usage x50
 		return fmt.Errorf("%w: certificate is too large", ErrInvalidCertificate)
 	}
 	publicKey, ok := certificate.PublicKey.(ed25519.PublicKey)
-	if !ok || certificate.SignatureAlgorithm != x509.PureEd25519 {
+	if !ok || len(publicKey) != ed25519.PublicKeySize || certificate.SignatureAlgorithm != x509.PureEd25519 {
 		return fmt.Errorf("%w: Ed25519 is required", ErrInvalidCertificate)
 	}
-	if !bytes.Equal(publicKey, expected) {
+	if _, trusted := expected[[ed25519.PublicKeySize]byte(publicKey)]; !trusted {
 		return ErrPeerKeyMismatch
 	}
 	if now.Before(certificate.NotBefore) || !now.Before(certificate.NotAfter) {

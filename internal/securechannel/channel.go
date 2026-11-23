@@ -3,7 +3,6 @@
 package securechannel
 
 import (
-	"bytes"
 	"context"
 	"crypto"
 	"crypto/ed25519"
@@ -70,16 +69,24 @@ func New(keys identity.KeyPair, options Options) (*Endpoint, error) {
 // unused connection: its deadlines are replaced during setup and cleared on
 // success. ctx applies only to setup; canceling it afterward does not close Conn.
 func (e *Endpoint) Client(ctx context.Context, raw net.Conn, expectedPeer ed25519.PublicKey) (*Conn, error) {
-	return e.establish(ctx, raw, expectedPeer, true)
+	return e.establish(ctx, raw, []ed25519.PublicKey{expectedPeer}, true)
 }
 
 // Server authenticates an incoming peer against expectedPeer. See Client for
 // connection ownership and cancellation rules. Unknown peers are not accepted.
 func (e *Endpoint) Server(ctx context.Context, raw net.Conn, expectedPeer ed25519.PublicKey) (*Conn, error) {
-	return e.establish(ctx, raw, expectedPeer, false)
+	return e.establish(ctx, raw, []ed25519.PublicKey{expectedPeer}, false)
 }
 
-func (e *Endpoint) establish(ctx context.Context, raw net.Conn, expectedPeer ed25519.PublicKey, client bool) (result *Conn, err error) {
+// ServerForPeers accepts only a key in the supplied, already trusted set. TLS
+// still verifies the certificate and possession of its private key. The keys
+// are copied before network I/O; the resulting Conn identifies the actual peer.
+// An empty or invalid set fails closed. Ownership rules are the same as Server.
+func (e *Endpoint) ServerForPeers(ctx context.Context, raw net.Conn, expectedPeers []ed25519.PublicKey) (*Conn, error) {
+	return e.establish(ctx, raw, expectedPeers, false)
+}
+
+func (e *Endpoint) establish(ctx context.Context, raw net.Conn, expectedPeers []ed25519.PublicKey, client bool) (result *Conn, err error) {
 	if raw == nil {
 		return nil, fmt.Errorf("%w: nil connection", ErrInvalidConfig)
 	}
@@ -91,10 +98,16 @@ func (e *Endpoint) establish(ctx context.Context, raw net.Conn, expectedPeer ed2
 	if e == nil || e.signer == nil || e.timeout <= 0 || ctx == nil {
 		return nil, ErrInvalidConfig
 	}
-	if len(expectedPeer) != ed25519.PublicKeySize || bytes.Equal(expectedPeer, make([]byte, ed25519.PublicKeySize)) {
+	if len(expectedPeers) == 0 {
 		return nil, ErrInvalidPeerKey
 	}
-	peer := bytes.Clone(expectedPeer)
+	pins := make(map[[ed25519.PublicKeySize]byte]struct{}, len(expectedPeers))
+	for _, publicKey := range expectedPeers {
+		if len(publicKey) != ed25519.PublicKeySize || [ed25519.PublicKeySize]byte(publicKey) == [ed25519.PublicKeySize]byte{} {
+			return nil, ErrInvalidPeerKey
+		}
+		pins[[ed25519.PublicKeySize]byte(publicKey)] = struct{}{}
+	}
 	ctx, cancel := context.WithTimeout(ctx, e.timeout)
 	defer cancel()
 	if err := ctx.Err(); err != nil {
@@ -120,12 +133,15 @@ func (e *Endpoint) establish(ctx context.Context, raw net.Conn, expectedPeer ed2
 	} else {
 		config.ClientAuth = tls.RequireAnyClientCert
 	}
+	var peer [ed25519.PublicKeySize]byte
 	config.VerifyConnection = func(state tls.ConnectionState) error {
-		err := verifyPeer(state, peer, usage, time.Now())
+		err := verifyPeer(state, pins, usage, time.Now())
 		if err != nil {
 			// Reject immediately even if the peer never reads TLS's failure alert.
 			// Close the raw transport, not tls.Conn (which holds handshake locks).
 			_ = raw.Close()
+		} else {
+			copy(peer[:], state.PeerCertificates[0].PublicKey.(ed25519.PublicKey))
 		}
 		return err
 	}
@@ -159,9 +175,7 @@ func (e *Endpoint) establish(ctx context.Context, raw net.Conn, expectedPeer ed2
 	if err := raw.SetDeadline(time.Time{}); err != nil {
 		return nil, errors.Join(ErrHandshake, err)
 	}
-	var publicKey [ed25519.PublicKeySize]byte
-	copy(publicKey[:], peer)
-	return &Conn{connection: connection, peer: publicKey}, nil
+	return &Conn{connection: connection, peer: peer}, nil
 }
 
 func handshake(ctx context.Context, connection *tls.Conn, client bool) error {

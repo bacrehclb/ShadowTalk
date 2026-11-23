@@ -45,10 +45,11 @@ ShadowTalk is an open-source terminal messenger in development. The goal is simp
 | Terminal UI | Create, view, upgrade and recover a local profile |
 | Invitations | Signed tokens with an onion address, public key and expiration time |
 | Contacts | Local aliases, explicit fingerprint confirmation and persistent storage |
-| Secure channel | TLS 1.3 with mutual verification of the expected identity keys; tested as a separate module |
-| Tor transport | Managed Tor process and stable v3 onion address; application integration is pending |
+| Secure channel | TLS 1.3 with mutual verification of confirmed identity keys |
+| Tor transport | Managed Tor process and stable v3 onion address |
+| Peer sessions | Core API connecting profiles, contacts, Tor and TLS, with connection limits and cancellation |
 
-The network modules are not connected to a user-facing chat yet. Local transport tests pass; a complete exchange over the public Tor network has **not yet been verified**. See the [Tor validation notes](https://github.com/bacrehclb/ShadowTalk/blob/dev/docs/tor.md).
+The network core is not connected to CLI/TUI commands yet. Local integration tests cover saved profiles, invitations and authenticated streams through simulated Tor processes; a complete exchange over the public Tor network has **not yet been verified**. The core uses a contact snapshot until restart. See the [Tor validation notes](https://github.com/bacrehclb/ShadowTalk/blob/dev/docs/tor.md).
 
 ## Quick start
 
@@ -163,7 +164,8 @@ The private seed is encrypted in `identity-seed.json`; its encryption key stays 
 - [x] Profile TUI
 - [x] Separate secure-channel and Tor transport modules
 - [x] Signed invitations and confirmed local contacts
-- [ ] Connect contacts, Tor and secure sessions in the application
+- [x] Connect profiles, contacts, Tor and TLS in the peer-session core
+- [ ] Connect peer sessions to CLI/TUI commands
 - [ ] Verify a complete exchange over the public Tor network
 - [ ] One-to-one messaging and a terminal chat screen
 - [ ] Local message history, acknowledgements and delivery retries
@@ -178,9 +180,10 @@ One Go module, one application binary. The current implementation lives in `dev`
 ```text
 cmd/shadowtalk/          CLI commands and application entry point
 internal/
-  app/                  Profile and contact use cases
+  app/                  Profile, contact and network startup use cases
   identity/             Nicknames, identity keys and onion-key derivation
   contacts/             Signed invitations and contact rules
+  peers/                Authenticated streams, connection limits and lifecycle
   onion/                Onion v3 address format
   securechannel/        TLS with mutual identity verification
   transport/tor/        Tor process, onion service and SOCKS connections
@@ -231,7 +234,7 @@ SHADOWTALK_NATIVE_KEYRING_TEST=1 go test ./cmd/shadowtalk -run '^TestNativeKeySt
 # Real Tor controller and onion key, without joining the Tor network.
 SHADOWTALK_TOR_BINARY=/absolute/path/to/tor go test ./internal/transport/tor -run '^TestNativeTorControl$' -count=1 -v
 
-# Two Tor nodes and a mutually authenticated TLS exchange over the live network.
+# Two peer managers and authenticated streams over the live Tor network.
 SHADOWTALK_TOR_BINARY=/absolute/path/to/tor SHADOWTALK_TOR_LIVE_TEST=1 go test ./tests/integration -run '^TestTorSecureChannelLive$' -count=1 -v -timeout=7m
 ```
 
