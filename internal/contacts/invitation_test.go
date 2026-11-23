@@ -22,7 +22,10 @@ func TestIndependentInvitationV1Vector(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	invite, err := ParseInvitation(strings.TrimSuffix(string(data), "\n"), testTime)
+	// Git may check out this text fixture with LF or CRLF. Remove its record
+	// terminator before passing the unchanged token to the strict parser.
+	token := strings.TrimSuffix(strings.TrimSuffix(string(data), "\r\n"), "\n")
+	invite, err := ParseInvitation(token, testTime)
 	if err != nil {
 		t.Fatal(err)
 	}
