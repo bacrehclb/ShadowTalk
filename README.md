@@ -48,8 +48,9 @@ ShadowTalk is an open-source terminal messenger in development. The goal is simp
 | Secure channel | TLS 1.3 with mutual verification of confirmed identity keys |
 | Tor transport | Managed Tor process and stable v3 onion address |
 | Peer sessions | Core API connecting profiles, contacts, Tor and TLS, with connection limits and cancellation |
+| Message protocol | Versioned text and acknowledgement frames, random message IDs and strict size limits; storage and delivery are pending |
 
-The network core is not connected to CLI/TUI commands yet. Local integration tests cover saved profiles, invitations and authenticated streams through simulated Tor processes; a complete exchange over the public Tor network has **not yet been verified**. The core uses a contact snapshot until restart. See the [Tor validation notes](https://github.com/bacrehclb/ShadowTalk/blob/dev/docs/tor.md).
+The network core is not connected to CLI/TUI commands yet. Local integration tests cover saved profiles, invitations and framed messages through TLS and simulated Tor processes; a complete exchange over the public Tor network has **not yet been verified**. The core uses a contact snapshot until restart. See the [Tor validation notes](https://github.com/bacrehclb/ShadowTalk/blob/dev/docs/tor.md).
 
 ## Quick start
 
@@ -165,6 +166,7 @@ The private seed is encrypted in `identity-seed.json`; its encryption key stays 
 - [x] Separate secure-channel and Tor transport modules
 - [x] Signed invitations and confirmed local contacts
 - [x] Connect profiles, contacts, Tor and TLS in the peer-session core
+- [x] Bounded text and acknowledgement wire protocol
 - [ ] Connect peer sessions to CLI/TUI commands
 - [ ] Verify a complete exchange over the public Tor network
 - [ ] One-to-one messaging and a terminal chat screen
@@ -184,6 +186,7 @@ internal/
   identity/             Nicknames, identity keys and onion-key derivation
   contacts/             Signed invitations and contact rules
   peers/                Authenticated streams, connection limits and lifecycle
+  protocol/             Message framing, IDs, versions and size limits
   onion/                Onion v3 address format
   securechannel/        TLS with mutual identity verification
   transport/tor/        Tor process, onion service and SOCKS connections
@@ -201,7 +204,7 @@ These links point to the current documentation in `dev`. Technical documents are
 | --- | --- |
 | [Project overview](https://github.com/bacrehclb/ShadowTalk/blob/dev/docs/overview.md) | Goals and user scenarios |
 | [Architecture](https://github.com/bacrehclb/ShadowTalk/blob/dev/docs/architecture.md) | Module boundaries and dependencies |
-| [Protocol](https://github.com/bacrehclb/ShadowTalk/blob/dev/docs/protocol.md) | Invitations and planned communication formats |
+| [Protocol](https://github.com/bacrehclb/ShadowTalk/blob/dev/docs/protocol.md) | Invitations, text frames and acknowledgement format |
 | [Security](https://github.com/bacrehclb/ShadowTalk/blob/dev/docs/security.md) | Key storage, trust and limitations |
 | [Tor transport](https://github.com/bacrehclb/ShadowTalk/blob/dev/docs/tor.md) | Runtime setup, lifecycle and validation status |
 | [Design decisions](https://github.com/bacrehclb/ShadowTalk/tree/dev/docs/decisions) | Rationale behind the implementation |

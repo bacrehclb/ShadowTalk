@@ -3,7 +3,6 @@ package integration
 import (
 	"context"
 	"errors"
-	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -12,6 +11,7 @@ import (
 	"github.com/bacrehclb/ShadowTalk/internal/contacts"
 	"github.com/bacrehclb/ShadowTalk/internal/identity"
 	"github.com/bacrehclb/ShadowTalk/internal/peers"
+	"github.com/bacrehclb/ShadowTalk/internal/protocol"
 	"github.com/bacrehclb/ShadowTalk/internal/transport/tor"
 )
 
@@ -68,6 +68,16 @@ func TestTorSecureChannelLive(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Log("both Tor nodes bootstrapped and published onion descriptors")
+	id, err := protocol.NewMessageID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := protocol.Frame{Type: protocol.TypeText, ID: id, Text: "Привет через Tor 👋"}
+	replyID, err := protocol.NewMessageID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantReply := protocol.Frame{Type: protocol.TypeText, ID: replyID, Text: "authenticated Tor reply"}
 	serverDone := make(chan error, 1)
 	go func() {
 		conn, err := bob.node.Accept(ctx)
@@ -81,12 +91,13 @@ func TestTorSecureChannelLive(t *testing.T) {
 			return
 		}
 		_ = conn.SetDeadline(time.Now().Add(time.Minute))
-		message := make([]byte, len("hello over Tor"))
-		if _, err = io.ReadFull(conn, message); err == nil && string(message) != "hello over Tor" {
+		message, err := protocol.NewReader(conn).ReadFrame()
+		if err == nil && message != want {
 			err = errors.New("unexpected test message")
 		}
 		if err == nil {
-			_, err = conn.Write([]byte("authenticated Tor reply"))
+			// Exercise reply framing without claiming durable storage or ack.
+			err = protocol.NewWriter(conn).WriteFrame(wantReply)
 		}
 		serverDone <- err
 	}()
@@ -99,15 +110,15 @@ func TestTorSecureChannelLive(t *testing.T) {
 		t.Fatal("unexpected outgoing peer")
 	}
 	_ = conn.SetDeadline(time.Now().Add(time.Minute))
-	if _, err := conn.Write([]byte("hello over Tor")); err != nil {
+	if err := protocol.NewWriter(conn).WriteFrame(want); err != nil {
 		t.Fatal(err)
 	}
-	reply := make([]byte, len("authenticated Tor reply"))
-	if _, err := io.ReadFull(conn, reply); err != nil || string(reply) != "authenticated Tor reply" {
-		t.Fatalf("reply: %q, %v", reply, err)
+	reply, err := protocol.NewReader(conn).ReadFrame()
+	if err != nil || reply != wantReply {
+		t.Fatalf("reply: %+v, %v", reply, err)
 	}
 	if err := <-serverDone; err != nil {
 		t.Fatal(err)
 	}
-	t.Log("mutually authenticated TLS exchange through the real Tor network succeeded")
+	t.Log("framed message exchange over mutually authenticated TLS through the real Tor network succeeded")
 }
