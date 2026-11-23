@@ -5,10 +5,12 @@ package tor
 import (
 	"errors"
 	"time"
+
+	"github.com/bacrehclb/ShadowTalk/internal/onion"
 )
 
 var (
-	ErrInvalidAddress = errors.New("invalid onion v3 address")
+	ErrInvalidAddress = onion.ErrInvalidAddress
 	ErrInvalidOptions = errors.New("invalid Tor options")
 	ErrUnavailable    = errors.New("Tor executable unavailable")
 	ErrDataDirectory  = errors.New("Tor data directory unavailable or unsafe")

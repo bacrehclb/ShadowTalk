@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -117,6 +118,11 @@ func TestUIWithPipesFailsWithoutReadingOrCreatingProfile(t *testing.T) {
 
 func runCLIProcess(t *testing.T, work, keys string, extraEnv []string, args ...string) processResult {
 	t.Helper()
+	return runCLIProcessWithInput(t, work, keys, extraEnv, nil, args...)
+}
+
+func runCLIProcessWithInput(t *testing.T, work, keys string, extraEnv []string, input io.Reader, args ...string) processResult {
+	t.Helper()
 	binary, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
@@ -125,6 +131,7 @@ func runCLIProcess(t *testing.T, work, keys string, extraEnv []string, args ...s
 	defer cancel()
 	command := exec.CommandContext(ctx, binary, append([]string{"-test.run=^TestCLIChildProcess$", "--"}, args...)...)
 	command.Dir = work
+	command.Stdin = input
 	command.Env = append(os.Environ(), "SHADOWTALK_TEST_CHILD=1", "SHADOWTALK_TEST_KEYS="+keys)
 	command.Env = append(command.Env, extraEnv...)
 	var out, diagnostic bytes.Buffer

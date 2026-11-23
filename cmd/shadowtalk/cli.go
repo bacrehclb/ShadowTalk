@@ -19,7 +19,7 @@ import (
 	"github.com/bacrehclb/ShadowTalk/internal/tui"
 )
 
-const usage = `ShadowTalk — локальный профиль
+const usage = `ShadowTalk — профиль и контакты
 
 Использование:
   shadowtalk [--profile-dir PATH] ui
@@ -27,17 +27,24 @@ const usage = `ShadowTalk — локальный профиль
   shadowtalk [--profile-dir PATH] profile show
   shadowtalk [--profile-dir PATH] profile upgrade
   shadowtalk [--profile-dir PATH] profile recover
+  shadowtalk [--profile-dir PATH] invite create [--ttl 24h]
+  shadowtalk invite inspect --file PATH|-
+  shadowtalk [--profile-dir PATH] contacts add --alias NAME --fingerprint SHA256:... --file PATH|-
+  shadowtalk [--profile-dir PATH] contacts list
+  shadowtalk [--profile-dir PATH] contacts show --alias NAME
+  shadowtalk [--profile-dir PATH] contacts remove --alias NAME --fingerprint SHA256:...
 
 ui открывает терминальный интерфейс профиля (нужны терминальные stdin и stdout).
 create создаёт профиль и сохраняет ключи в системном хранилище ОС.
 show проверяет ключи и показывает отпечаток публичной идентичности.
 upgrade добавляет ключи старому профилю без изменения ника и даты создания.
 recover завершает прерванное создание с сохранёнными ключами.
+invite и contacts имеют собственную справку через --help.
 
 Ник: 3–24 символа; латинские буквы, цифры, _ и -.
 Первый и последний символ — буква или цифра.
 
---profile-dir задаётся перед командой ui или profile.
+--profile-dir задаётся перед командой.
 По умолчанию используется каталог shadowtalk внутри системного каталога
 конфигурации пользователя. --help показывает эту справку.`
 
@@ -54,6 +61,10 @@ func runWithKeys(args []string, stdout, stderr io.Writer, keys app.EncryptionKey
 }
 
 func execute(args []string, stdout io.Writer, keys app.EncryptionKeys) error {
+	return executeWithInput(args, os.Stdin, stdout, keys)
+}
+
+func executeWithInput(args []string, stdin io.Reader, stdout io.Writer, keys app.EncryptionKeys) error {
 	flags := flag.NewFlagSet("shadowtalk", flag.ContinueOnError)
 	directory := flags.String("profile-dir", "", "каталог локального профиля")
 	if err := parseFlags(flags, args, stdout); err != nil {
@@ -63,6 +74,12 @@ func execute(args []string, stdout io.Writer, keys app.EncryptionKeys) error {
 	if len(args) == 0 {
 		_, err := fmt.Fprintln(stdout, usage)
 		return err
+	}
+	if args[0] == "invite" {
+		return executeInvite(args[1:], *directory, stdin, stdout, keys)
+	}
+	if args[0] == "contacts" {
+		return executeContacts(args[1:], *directory, stdin, stdout)
 	}
 	if args[0] != "profile" && args[0] != "ui" {
 		return errors.New("неизвестная команда; используйте --help")
@@ -170,6 +187,9 @@ func parseFlags(flags *flag.FlagSet, args []string, stdout io.Writer) error {
 }
 
 func userError(err error) string {
+	if description := contactError(err); description != "" {
+		return description
+	}
 	switch {
 	case errors.Is(err, app.ErrProfileBusy):
 		return "профиль используется другой операцией; повторите команду после её завершения"
