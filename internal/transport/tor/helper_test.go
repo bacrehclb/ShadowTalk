@@ -75,7 +75,7 @@ func runFakeTor(mode string) error {
 	if err := os.WriteFile(args["--CookieAuthFile"], cookie, 0600); err != nil {
 		return err
 	}
-	if err := os.WriteFile(args["--ControlPortWriteToFile"], []byte("PORT="+controller.Addr().String()+"\n"), 0600); err != nil {
+	if err := publishFakeControlPort(args["--ControlPortWriteToFile"], controller.Addr().String()); err != nil {
 		return err
 	}
 	conn, err := controller.Accept()
@@ -203,6 +203,16 @@ func runFakeTor(mode string) error {
 			}
 		}
 	}
+}
+
+func publishFakeControlPort(path, address string) error {
+	// Like Tor, finish writing a separate file before publishing the port path.
+	// The parent polls that path and must never observe an empty/partial record.
+	pending := path + ".tmp"
+	if err := os.WriteFile(pending, []byte("PORT="+address+"\n"), 0600); err != nil {
+		return err
+	}
+	return os.Rename(pending, path)
 }
 
 func safeCookieMAC(direction string, message []byte) []byte {
