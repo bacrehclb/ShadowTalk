@@ -22,6 +22,7 @@ import (
 const usage = `ShadowTalk — терминальный P2P-чат
 
 Использование:
+  shadowtalk --version
   shadowtalk [--profile-dir PATH] ui
   shadowtalk [--profile-dir PATH] chat [--contact NAME] [--tor-binary PATH]
   shadowtalk [--profile-dir PATH] profile create --nick NICK
@@ -69,10 +70,17 @@ func execute(args []string, stdout io.Writer, keys app.EncryptionKeys) error {
 func executeWithInput(args []string, stdin io.Reader, stdout io.Writer, keys app.EncryptionKeys) error {
 	flags := flag.NewFlagSet("shadowtalk", flag.ContinueOnError)
 	directory := flags.String("profile-dir", "", "каталог локального профиля")
+	showVersion := flags.Bool("version", false, "версия сборки")
 	if err := parseFlags(flags, args, stdout); err != nil {
 		return err
 	}
 	args = flags.Args()
+	if *showVersion {
+		if len(args) != 0 {
+			return errors.New("--version используется без команды")
+		}
+		return printVersion(stdout)
+	}
 	if len(args) == 0 {
 		_, err := fmt.Fprintln(stdout, usage)
 		return err
