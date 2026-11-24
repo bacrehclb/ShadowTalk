@@ -19,15 +19,16 @@ import (
 // process owns resources from preparation through reap. Only Start or Node's
 // shutdown path calls close; the waiter only records process termination.
 type process struct {
-	command *exec.Cmd
-	done    chan struct{}
-	lock    *flock.Flock
-	runDir  string
-	control net.Conn
-	timeout time.Duration
+	command   *exec.Cmd
+	done      chan struct{}
+	lock      *flock.Flock
+	runDir    string
+	control   net.Conn
+	timeout   time.Duration
+	transport *obfs4Process
 }
 
-func startProcess(options Options) (_ *process, err error) {
+func startProcess(ctx context.Context, options Options) (_ *process, err error) {
 	binary, err := exec.LookPath(options.BinaryPath)
 	if err != nil {
 		return nil, ErrUnavailable
@@ -61,8 +62,16 @@ func startProcess(options Options) (_ *process, err error) {
 	if err != nil {
 		return nil, ErrDataDirectory
 	}
+	var endpoint string
+	if options.Connection.Mode == "obfs4" {
+		p.transport, err = startObfs4(ctx, options.Connection.LyrebirdBinary, filepath.Join(p.runDir, "pt-state"), options.ShutdownTimeout)
+		if err != nil {
+			return nil, err
+		}
+		endpoint = p.transport.endpoint
+	}
 	torrc := filepath.Join(p.runDir, "torrc")
-	if err = os.WriteFile(torrc, nil, 0600); err != nil {
+	if err = os.WriteFile(torrc, options.Connection.torrc(endpoint), 0600); err != nil {
 		return nil, ErrDataDirectory
 	}
 	p.command = exec.Command(binary, torArguments(directory, p.runDir)...)
@@ -119,6 +128,8 @@ func (p *process) connect(ctx context.Context) (net.Conn, error) {
 			return nil, ctx.Err()
 		case <-p.done:
 			return nil, ErrProcessExited
+		case <-p.transportDone():
+			return nil, ErrObfs4Exited
 		case <-ticker.C:
 		}
 	}
@@ -164,6 +175,9 @@ func (p *process) close() error {
 		}
 		timer.Stop()
 	}
+	if p.transport != nil {
+		p.transport.close()
+	}
 	var cleanup error
 	if p.runDir != "" {
 		cleanup = os.RemoveAll(p.runDir)
@@ -175,4 +189,11 @@ func (p *process) close() error {
 		return ErrDataDirectory
 	}
 	return nil
+}
+
+func (p *process) transportDone() <-chan struct{} {
+	if p.transport == nil {
+		return nil
+	}
+	return p.transport.done
 }

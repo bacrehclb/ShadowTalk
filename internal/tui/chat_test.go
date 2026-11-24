@@ -47,7 +47,7 @@ func (s *fakeChat) Close() error                  { s.closed.Add(1); return nil 
 func readyChat(t *testing.T) (*chatModel, *fakeChat) {
 	t.Helper()
 	s := &fakeChat{changes: make(chan struct{})}
-	r := newChatRuntime(func(context.Context, func(ChatStage)) (ChatSession, error) { return s, nil })
+	r := newChatRuntime(func(context.Context, func(ChatStartup)) (ChatSession, error) { return s, nil })
 	t.Cleanup(func() { r.Close() })
 	m := newChatModel(r, ChatOptions{}, 80, 24)
 	m.Update(r.openCmd())
@@ -56,6 +56,32 @@ func readyChat(t *testing.T) (*chatModel, *fakeChat) {
 }
 func keyPress(code rune, mod tea.KeyMod) tea.KeyPressMsg {
 	return tea.KeyPressMsg{Code: code, Mod: mod}
+}
+
+func TestChatStartupProgressIsBoundedAndDoesNotBlockCancellation(t *testing.T) {
+	r := newChatRuntime(func(ctx context.Context, report func(ChatStartup)) (ChatSession, error) {
+		for i := 0; i < 1000; i++ {
+			report(ChatStartup{Stage: ChatConnectingTor, Percent: 14, HasPercent: true, Detail: "рукопожатие"})
+		}
+		<-ctx.Done()
+		return nil, ctx.Err()
+	})
+	done := make(chan struct{})
+	go func() { r.openCmd(); close(done) }()
+	m := newChatModel(r, ChatOptions{}, 60, 20)
+	m.Update(r.stageCmd())
+	view := m.View().Content
+	if !strings.Contains(view, "14%") || !strings.Contains(view, "рукопожатие") || lipgloss.Width(view) > 60 {
+		t.Fatal("progress not rendered")
+	}
+	if err := r.Close(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("progress blocked shutdown")
+	}
 }
 
 func TestChatSendIsAsyncAndRetainsIDAcrossAmbiguousFailure(t *testing.T) {
@@ -184,7 +210,7 @@ func TestChatRuntimeWaitsForLateStartupAndInFlightSave(t *testing.T) {
 		t.Run(during, func(t *testing.T) {
 			entered, release := make(chan struct{}), make(chan struct{})
 			s := &fakeChat{changes: make(chan struct{})}
-			r := newChatRuntime(func(ctx context.Context, _ func(ChatStage)) (ChatSession, error) {
+			r := newChatRuntime(func(ctx context.Context, _ func(ChatStartup)) (ChatSession, error) {
 				if during == "startup" {
 					close(entered)
 					<-release

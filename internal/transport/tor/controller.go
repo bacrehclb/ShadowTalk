@@ -7,14 +7,13 @@ import (
 	"net"
 	"net/textproto"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/cretz/bine/control"
 )
 
-func configure(ctx context.Context, raw net.Conn, cookieFile string, key *serviceKey, address, target string) (string, error) {
+func configure(ctx context.Context, raw net.Conn, cookieFile string, key *serviceKey, address, target string, reporter *progressReporter) (string, error) {
 	deadline, _ := ctx.Deadline()
 	if err := raw.SetDeadline(deadline); err != nil {
 		return "", ErrControl
@@ -72,7 +71,7 @@ func configure(ctx context.Context, raw net.Conn, cookieFile string, key *servic
 	if err != nil {
 		return "", startupError(ctx, "SOCKS listener", err)
 	}
-	if err = waitPublished(ctx, c, published); err != nil {
+	if err = waitPublished(ctx, c, published, reporter); err != nil {
 		return "", err
 	}
 	if err = c.RemoveEventListener(events, control.EventCodeHSDesc); err != nil {
@@ -117,29 +116,29 @@ func socksAddress(c *control.Conn) (string, error) {
 	return address, nil
 }
 
-func waitPublished(ctx context.Context, c *control.Conn, published <-chan struct{}) error {
+func waitPublished(ctx context.Context, c *control.Conn, published <-chan struct{}, reporter *progressReporter) error {
 	ticker := time.NewTicker(200 * time.Millisecond)
 	defer ticker.Stop()
 	bootstrapped, uploaded := false, false
-	stage := "bootstrap (0%)"
+	progress := Progress{Phase: Bootstrapping}
+	reporter.report(progress)
+	failure := func(cause error) error {
+		return &BootstrapError{Progress: progress, Cause: errors.Join(cause, contextError(ctx))}
+	}
 	for {
 		info, err := c.GetInfo("status/bootstrap-phase")
 		if err != nil {
-			return startupError(ctx, stage, ErrControl)
+			return failure(ErrControl)
 		}
 		for _, item := range info {
 			if item.Key == "status/bootstrap-phase" {
-				for _, field := range strings.Fields(item.Val) {
-					if value, ok := strings.CutPrefix(field, "PROGRESS="); ok {
-						progress, parseErr := strconv.Atoi(value)
-						if parseErr == nil && progress >= 0 && progress <= 100 {
-							stage = fmt.Sprintf("bootstrap (%d%%)", progress)
-							bootstrapped = progress == 100
-							if bootstrapped {
-								stage = "publish onion service"
-							}
-						}
+				if parsed, ok := parseBootstrap(item.Val); ok {
+					progress = parsed
+					bootstrapped = progress.Percent == 100
+					if bootstrapped {
+						progress.Phase = PublishingService
 					}
+					reporter.report(progress)
 				}
 			}
 		}
@@ -153,7 +152,7 @@ func waitPublished(ctx context.Context, c *control.Conn, published <-chan struct
 		}
 		select {
 		case <-ctx.Done():
-			return startupError(ctx, stage, ctx.Err())
+			return failure(ctx.Err())
 		case <-ticker.C:
 		}
 	}

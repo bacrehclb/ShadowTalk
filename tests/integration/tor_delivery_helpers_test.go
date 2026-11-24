@@ -27,6 +27,8 @@ type torDeliverySettings struct {
 	binary            string
 	startup, exchange time.Duration
 	delivery          delivery.Options
+	connection        tor.Connection
+	report            func(string, tor.Progress)
 }
 
 type torDeliveryPeer struct {
@@ -111,7 +113,11 @@ func (p *torDeliveryPeer) start(ctx context.Context, settings torDeliverySetting
 		if err != nil || address != p.address {
 			return nil, errors.New("onion identity changed on reload")
 		}
-		return tor.Start(lifetime, keys, tor.Options{BinaryPath: settings.binary, DataDir: filepath.Join(p.dir, "tor"), StartTimeout: settings.startup})
+		return tor.Start(lifetime, keys, tor.Options{BinaryPath: settings.binary, DataDir: filepath.Join(p.dir, "tor"), StartTimeout: settings.startup, Connection: settings.connection, OnProgress: func(progress tor.Progress) {
+			if settings.report != nil {
+				settings.report(p.profile.Nickname, progress)
+			}
+		}})
 	})
 	return sessions.StartDelivery(ctx, func(ctx context.Context, owner [32]byte, key []byte) (delivery.Store, error) {
 		return sqlite.Open(ctx, p.dir, owner, key)

@@ -43,7 +43,7 @@ type chatModel struct {
 	loading, latest, dirty   bool
 	drafts                   map[[32]byte]*chatDraft
 	width, height            int
-	stage                    ChatStage
+	stage                    ChatStartup
 	seconds                  int
 	opening, closing, closed bool
 	failure                  error
@@ -165,7 +165,7 @@ func (m *chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, chatClock(m.clock)
 		}
 		return m, nil
-	case ChatStage:
+	case ChatStartup:
 		if m.closing {
 			return m, nil
 		}
@@ -285,7 +285,7 @@ func (m *chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.failure = nil
 				m.seconds = 0
 				m.clock++
-				m.stage = ChatLoadingProfile
+				m.stage = ChatStartup{Stage: ChatLoadingProfile}
 				return m, tea.Batch(m.runtime.openCmd, chatClock(m.clock))
 			}
 			return m, nil
