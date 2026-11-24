@@ -276,11 +276,11 @@ SHADOWTALK_NATIVE_KEYRING_TEST=1 go test ./cmd/shadowtalk -run '^TestNativeKeySt
 # Real Tor controller and onion key, without joining the Tor network.
 SHADOWTALK_TOR_BINARY=/absolute/path/to/tor go test ./internal/transport/tor -run '^TestNativeTorControl$' -count=1 -v
 
-# Two chat cores exchanging messages over the live Tor network.
-SHADOWTALK_TOR_BINARY=/absolute/path/to/tor SHADOWTALK_TOR_LIVE_TEST=1 go test ./tests/integration -run '^TestTorSecureChannelLive$' -count=1 -v -timeout=7m
+# Live Tor: bidirectional delivery, durable ACKs and offline queue recovery after restart.
+SHADOWTALK_TOR_BINARY=/absolute/path/to/tor SHADOWTALK_TOR_LIVE_TEST=1 go test ./tests/integration -run '^TestTorSecureChannelLive$' -count=1 -v -timeout=15m
 ```
 
-In PowerShell, set the corresponding variables with `$env:NAME = 'value'` before running `go test`. The live Tor check can time out when the network is unavailable; it is not part of regular CI.
+In PowerShell, set the corresponding variables with `$env:NAME = 'value'` before running `go test`. The live Tor check uses temporary profiles, synthetic keys and encrypted SQLite history. It stops the receiver, queues a message, restarts both nodes and checks automatic delivery without duplicate history. It allows 3 minutes per Tor startup and 12 minutes overall, and can time out when the network is unavailable. Regular CI runs the same scenario with local test processes; that does not verify public Tor connectivity. See [Tor validation notes](docs/tor.md#ошибки-и-проверки) for observed results.
 
 </details>
 

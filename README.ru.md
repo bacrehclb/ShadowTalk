@@ -274,11 +274,11 @@ SHADOWTALK_NATIVE_KEYRING_TEST=1 go test ./cmd/shadowtalk -run '^TestNativeKeySt
 # Настоящий контроллер Tor и onion-ключ без подключения к сети Tor.
 SHADOWTALK_TOR_BINARY=/absolute/path/to/tor go test ./internal/transport/tor -run '^TestNativeTorControl$' -count=1 -v
 
-# Два экземпляра ядра чата обмениваются сообщениями через публичную сеть Tor.
-SHADOWTALK_TOR_BINARY=/absolute/path/to/tor SHADOWTALK_TOR_LIVE_TEST=1 go test ./tests/integration -run '^TestTorSecureChannelLive$' -count=1 -v -timeout=7m
+# Публичная сеть Tor: двусторонняя доставка, сохранение ACK и восстановление очереди после перезапуска.
+SHADOWTALK_TOR_BINARY=/absolute/path/to/tor SHADOWTALK_TOR_LIVE_TEST=1 go test ./tests/integration -run '^TestTorSecureChannelLive$' -count=1 -v -timeout=15m
 ```
 
-В PowerShell задайте соответствующие переменные через `$env:NAME = 'value'` перед запуском `go test`. Сетевой тест Tor может завершиться по тайм-ауту, если сеть недоступна; в обычный CI он не входит.
+В PowerShell задайте соответствующие переменные через `$env:NAME = 'value'` перед запуском `go test`. Сетевой тест использует временные профили, тестовые ключи и зашифрованную историю SQLite. Он выключает получателя, ставит сообщение в очередь, перезапускает оба узла и проверяет автоматическую доставку без дублей в истории. На каждый запуск Tor отводится 3 минуты, на весь сценарий — 12 минут; при недоступной сети возможен тайм-аут. Обычный CI выполняет этот же сценарий с локальными тестовыми процессами; доступность публичной сети Tor он не подтверждает. Результаты запусков — в [описании проверок Tor](docs/tor.md#ошибки-и-проверки).
 
 </details>
 
