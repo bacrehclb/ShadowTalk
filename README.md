@@ -32,7 +32,7 @@
 
 ShadowTalk is an open-source terminal messenger in development. The goal is simple: create a local identity, exchange invitations with someone you trust, and communicate through Tor onion services without a shared ShadowTalk server. A nickname is a display name; your cryptographic key is your identity.
 
-> **Early development:** profiles, signed invitations and local contacts are available. The core supports live text exchange, encrypted history and persistent delivery retries. Terminal chat screens are still pending.
+> **Early development:** profiles, signed invitations and local contacts are available. The core supports live text exchange, encrypted history and persistent delivery retries. The terminal chat is available through `shadowtalk chat`.
 >
 > The features and commands below describe the **[dev branch](https://github.com/bacrehclb/ShadowTalk/tree/dev)**. `main` currently contains an earlier code snapshot; use `dev` to try the current implementation.
 
@@ -42,7 +42,7 @@ ShadowTalk is an open-source terminal messenger in development. The goal is simp
 | --- | --- |
 | Local identity | Ed25519 keys, a full SHA-256 fingerprint and a persistent profile |
 | Key storage | AES-256-GCM encrypted seed; encryption key stored in the OS credential store |
-| Terminal UI | Create, view, upgrade and recover a local profile |
+| Terminal UI | Profile management, contact selection, message editor, paginated history and delivery status |
 | Invitations | Signed tokens with an onion address, public key and expiration time |
 | Contacts | Local aliases, explicit fingerprint confirmation and persistent storage |
 | Secure channel | TLS 1.3 with mutual verification of confirmed identity keys |
@@ -51,9 +51,9 @@ ShadowTalk is an open-source terminal messenger in development. The goal is simp
 | Message protocol | Versioned text and acknowledgement frames, random message IDs and strict size limits |
 | Chat core | Live conversations, text sending/receiving, bounded events and connection lifecycle; no automatic ACKs or retries |
 | History storage | SQLite with encrypted message text, duplicate detection and cursor pagination |
-| Delivery core | Persistent outbox, ACK after saving, retries after restart, and pending/delivered states; not yet exposed in CLI/TUI |
+| Delivery core | Persistent outbox, ACK after saving, retries after restart, and pending/delivered states in the terminal chat |
 
-The network core is not connected to CLI/TUI commands yet. Local integration tests cover saved profiles, invitations and framed messages through TLS and simulated Tor processes; a complete exchange over the public Tor network has **not yet been verified**. The core uses a contact snapshot until restart. See the [Tor validation notes](https://github.com/bacrehclb/ShadowTalk/blob/dev/docs/tor.md).
+The `chat` command connects the UI to the network and persistent delivery. Local terminal integration tests cover two CLI processes, saved profiles, TLS, simulated Tor, messages and restart; a complete exchange over the public Tor network has **not yet been verified**. The core uses a contact snapshot until restart. See the [Tor validation notes](https://github.com/bacrehclb/ShadowTalk/blob/dev/docs/tor.md).
 
 ## Quick start
 
@@ -61,9 +61,9 @@ The network core is not connected to CLI/TUI commands yet. Local integration tes
 
 - **Go 1.26 or newer** and Git to run from source.
 - **An accessible OS credential store:** Keychain on macOS, Credential Manager on Windows, or Secret Service over a user D-Bus session on Linux. Linux needs a running secret service with an available login/default collection; D-Bus alone is not enough.
-- **An interactive terminal** for the TUI, at least 40 × 20 characters.
+- **An interactive terminal:** at least 40 × 20 for the profile UI and 60 × 20 for chat.
 
-Tor is not needed for the profile and contact commands below. Testing the Tor transport requires a separate Tor executable; see the [transport guide](https://github.com/bacrehclb/ShadowTalk/blob/dev/docs/tor.md).
+Tor is not needed for the profile and contact commands below. The chat command requires a separate Tor executable; see the [transport guide](https://github.com/bacrehclb/ShadowTalk/blob/dev/docs/tor.md).
 
 ```sh
 git clone --branch dev https://github.com/bacrehclb/ShadowTalk.git
@@ -144,6 +144,37 @@ go run ./cmd/shadowtalk contacts remove --alias alice --fingerprint SHA256:...
 
 This removes the local entry; it does not revoke invitations. For command details, use `--help`, `invite --help` or `contacts --help`.
 
+### Open a chat
+
+After both participants have saved each other's confirmed invitations, install Tor separately and run:
+
+```sh
+go run ./cmd/shadowtalk chat --contact alice
+```
+
+If Tor is not on PATH, specify its executable (including `tor.exe` on Windows):
+
+```sh
+go run ./cmd/shadowtalk chat --tor-binary "/path/to/tor" --startup-timeout 5m
+```
+
+The screen shows startup stages, then contacts, history and the message editor. The default Tor startup timeout is 3 minutes; `--startup-timeout` accepts 1 second to 15 minutes. History opens after Tor is ready. Omitting `--contact` selects the first saved contact. Contacts and invitations are managed using the commands above; restart chat to apply changes.
+
+| Key | Chat action |
+| --- | --- |
+| Tab | Switch between contacts and message input |
+| ↑ / ↓ in contacts | Select a conversation |
+| Enter | Open the selected conversation or queue the message |
+| Alt+Enter | Insert a newline |
+| PgUp / PgDn | Scroll history; PgUp at the top loads older records |
+| Ctrl+L | Return to the latest messages and statuses |
+| Ctrl+R after a save error | Retry the same message without changing its ID |
+| Esc / Ctrl+C | Stop networking and exit |
+
+A `•` beside a contact marks changes during this session. It is not a read receipt. **Pending** messages stay in the encrypted local queue; **delivered** means the peer acknowledged saving them. Both users must be online for delivery. Saved messages resume automatically on the next `chat` launch; unsaved drafts are kept only in memory. The screen keeps up to 200 history records at a time; the database retains older records.
+
+Message text is limited to 16384 UTF-8 bytes. Oversized pastes are rejected, and terminal control sequences are displayed safely. `chat` requires terminal input and output; it does not accept piped messages. Details: `chat --help`.
+
 ## Local data and security
 
 | OS | Default profile directory |
@@ -160,7 +191,7 @@ go run ./cmd/shadowtalk --profile-dir ./data/demo ui
 
 The private seed is encrypted in `identity-seed.json`; its encryption key stays in the OS credential store. ShadowTalk does not use a separate application password or fall back to storing that key in plaintext. Copying the profile directory alone is **not a portable backup** of the identity.
 
-`profile.json` and `contacts.json` contain unencrypted public metadata, including contact relationships. When used by the core API, `messages.db` encrypts message text with a profile-derived key; peers, IDs, directions, times, message lengths and delivery metadata remain visible. The history store is not yet opened by CLI/TUI commands. A nickname or invitation signature does not replace fingerprint verification. This is an unfinished messenger, not a claim of security readiness; the [security notes](https://github.com/bacrehclb/ShadowTalk/blob/dev/docs/security.md) describe the mechanisms and their limits.
+`profile.json` and `contacts.json` contain unencrypted public metadata, including contact relationships. When used by the core API, `messages.db` encrypts message text with a profile-derived key; peers, IDs, directions, times, message lengths and delivery metadata remain visible. The chat command opens history and resumes the saved outgoing queue. A nickname or invitation signature does not replace fingerprint verification. This is an unfinished messenger, not a claim of security readiness; the [security notes](https://github.com/bacrehclb/ShadowTalk/blob/dev/docs/security.md) describe the mechanisms and their limits.
 
 ## Roadmap
 
@@ -171,9 +202,9 @@ The private seed is encrypted in `identity-seed.json`; its encryption key stays 
 - [x] Connect profiles, contacts, Tor and TLS in the peer-session core
 - [x] Bounded text and acknowledgement wire protocol
 - [x] Live one-to-one chat core and events for the interface
-- [ ] Connect peer sessions to CLI/TUI commands
+- [x] Connect peer sessions to CLI/TUI commands
 - [ ] Verify a complete exchange over the public Tor network
-- [ ] Terminal chat screen
+- [x] Terminal chat screen
 - [x] Encrypted local history storage API
 - [x] Connect history to chat, acknowledgements and delivery retries
 - [ ] Release packaging for Windows, macOS and Linux
@@ -199,7 +230,7 @@ internal/
   securechannel/        TLS with mutual identity verification
   transport/tor/        Tor process, onion service and SOCKS connections
   storage/              Profile files, contacts, OS keys and encrypted SQLite history
-  tui/                  Terminal profile screens
+  tui/                  Profile screens, chat, bounded history and safe rendering
 docs/                   Architecture, protocol and design decisions
 tests/integration/      Tests across module and process boundaries
 ```

@@ -19,10 +19,11 @@ import (
 	"github.com/bacrehclb/ShadowTalk/internal/tui"
 )
 
-const usage = `ShadowTalk — профиль и контакты
+const usage = `ShadowTalk — терминальный P2P-чат
 
 Использование:
   shadowtalk [--profile-dir PATH] ui
+  shadowtalk [--profile-dir PATH] chat [--contact NAME] [--tor-binary PATH]
   shadowtalk [--profile-dir PATH] profile create --nick NICK
   shadowtalk [--profile-dir PATH] profile show
   shadowtalk [--profile-dir PATH] profile upgrade
@@ -35,6 +36,7 @@ const usage = `ShadowTalk — профиль и контакты
   shadowtalk [--profile-dir PATH] contacts remove --alias NAME --fingerprint SHA256:...
 
 ui открывает терминальный интерфейс профиля (нужны терминальные stdin и stdout).
+chat открывает переписку через Tor; параметры и клавиши — chat --help.
 create создаёт профиль и сохраняет ключи в системном хранилище ОС.
 show проверяет ключи и показывает отпечаток публичной идентичности.
 upgrade добавляет ключи старому профилю без изменения ника и даты создания.
@@ -80,6 +82,9 @@ func executeWithInput(args []string, stdin io.Reader, stdout io.Writer, keys app
 	}
 	if args[0] == "contacts" {
 		return executeContacts(args[1:], *directory, stdin, stdout)
+	}
+	if args[0] == "chat" {
+		return executeChat(args[1:], *directory, stdin, stdout, keys)
 	}
 	if args[0] != "profile" && args[0] != "ui" {
 		return errors.New("неизвестная команда; используйте --help")

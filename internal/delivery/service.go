@@ -23,6 +23,7 @@ type Service struct {
 	once     sync.Once
 	workers  sync.WaitGroup
 	mu       sync.Mutex
+	activity map[[32]byte]uint64
 	closed   bool
 	err      error
 	closeErr error
@@ -43,7 +44,7 @@ func Start(ctx context.Context, store Store, network Network, options Options) (
 		return nil, err
 	}
 	lifetime, cancel := context.WithCancel(ctx)
-	s := &Service{store: store, network: network, options: options, ctx: lifetime, cancel: cancel, wake: make(chan struct{}, 1), changes: make(chan struct{}, 1), done: make(chan struct{})}
+	s := &Service{store: store, network: network, options: options, ctx: lifetime, cancel: cancel, wake: make(chan struct{}, 1), changes: make(chan struct{}, 1), done: make(chan struct{}), activity: make(map[[32]byte]uint64)}
 	s.workers.Add(2)
 	go s.receive()
 	go s.dispatch()
@@ -114,7 +115,7 @@ func (s *Service) Queue(ctx context.Context, peer [32]byte, message chat.Message
 		return Item{}, false, err
 	}
 	if added {
-		s.changed()
+		s.changed(peer)
 	}
 	s.trigger()
 	return item, added, nil
@@ -138,8 +139,23 @@ func (s *Service) List(ctx context.Context, peer [32]byte, query history.Query) 
 	return s.store.List(ctx, peer, query)
 }
 
+// Activity returns in-session revisions of persisted changes, bounded by the
+// confirmed peer snapshot. These are UI hints, not durable unread/read receipts.
+func (s *Service) Activity() map[[32]byte]uint64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	result := make(map[[32]byte]uint64, len(s.activity))
+	for peer, revision := range s.activity {
+		result[peer] = revision
+	}
+	return result
+}
+
 // Called only by registered operations/workers before changes closes.
-func (s *Service) changed() {
+func (s *Service) changed(peer [32]byte) {
+	s.mu.Lock()
+	s.activity[peer]++
+	s.mu.Unlock()
 	select {
 	case s.changes <- struct{}{}:
 	default:

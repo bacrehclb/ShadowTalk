@@ -37,6 +37,10 @@ type terminalTest struct {
 }
 
 func startTerminal(t *testing.T, profile, keys string, inputPipe, outputPipe, dumb bool) *terminalTest {
+	return startTerminalArgs(t, profile, keys, inputPipe, outputPipe, dumb, nil, "ui")
+}
+
+func startTerminalArgs(t *testing.T, profile, keys string, inputPipe, outputPipe, dumb bool, env []string, args ...string) *terminalTest {
 	t.Helper()
 	binary, err := os.Executable()
 	if err != nil {
@@ -52,15 +56,16 @@ func startTerminal(t *testing.T, profile, keys string, inputPipe, outputPipe, du
 	if err := pty.Setsize(master, &pty.Winsize{Rows: 24, Cols: 80}); err != nil {
 		t.Fatal(err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 	t.Cleanup(cancel)
-	command := exec.CommandContext(ctx, binary, "-test.run=^TestCLIChildProcess$", "--", "--profile-dir", profile, "ui")
+	command := exec.CommandContext(ctx, binary, append([]string{"-test.run=^TestCLIChildProcess$", "--", "--profile-dir", profile}, args...)...)
 	terminal := &terminalTest{t: t, master: master, slave: slave, command: command, done: make(chan struct{}), changed: make(chan struct{}, 1)}
 	command.Dir = t.TempDir()
 	command.Env = append(os.Environ(), "SHADOWTALK_TEST_CHILD=1", "SHADOWTALK_TEST_TERMINAL=1", "SHADOWTALK_TEST_KEYS="+keys, "TERM=xterm-256color", "NO_COLOR=1")
 	if dumb {
 		command.Env = append(command.Env, "TERM=dumb")
 	}
+	command.Env = append(command.Env, env...)
 	command.Stdin, command.Stdout, command.Stderr = slave, slave, &terminal.diagnostic
 	if inputPipe {
 		command.Stdin = strings.NewReader("")

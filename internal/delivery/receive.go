@@ -40,7 +40,7 @@ func (s *Service) receive() {
 					return
 				}
 				if added {
-					s.changed()
+					s.changed(event.Peer.PublicKey)
 				}
 				ctx, cancel := context.WithTimeout(s.ctx, s.options.AckWriteTimeout)
 				_ = s.network.Acknowledge(ctx, event.Peer.PublicKey, event.Message.ID)
@@ -56,7 +56,7 @@ func (s *Service) receive() {
 					return
 				}
 				if changed {
-					s.changed()
+					s.changed(event.Peer.PublicKey)
 					s.trigger()
 				}
 			default:
