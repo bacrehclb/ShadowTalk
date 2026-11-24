@@ -29,6 +29,18 @@ func (s *Store) Append(ctx context.Context, message history.Message) (history.En
 		return history.Entry{}, false, storageError(err)
 	}
 	defer tx.Rollback()
+	entry, inserted, err := s.appendRecord(ctx, tx, message)
+	if err != nil {
+		return history.Entry{}, false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return history.Entry{}, false, storageError(err)
+	}
+	return entry, inserted, nil
+}
+
+// Caller validates the message and owns the transaction.
+func (s *Store) appendRecord(ctx context.Context, tx *sql.Tx, message history.Message) (history.Entry, bool, error) {
 	existing, err := s.readRecord(tx.QueryRowContext(ctx, findRecord, message.Peer[:], message.Direction, message.ID[:]))
 	if err == nil {
 		if existing.Text != message.Text {
@@ -58,9 +70,6 @@ func (s *Store) Append(ctx context.Context, message history.Message) (history.En
 		return history.Entry{}, false, err
 	}
 	if _, err := tx.ExecContext(ctx, "UPDATE messages SET ciphertext=? WHERE sequence=?", ciphertext, sequence); err != nil {
-		return history.Entry{}, false, storageError(err)
-	}
-	if err := tx.Commit(); err != nil {
 		return history.Entry{}, false, storageError(err)
 	}
 	return entry, true, nil
@@ -124,11 +133,12 @@ func (s *Store) List(ctx context.Context, peer [32]byte, query history.Query) (h
 
 type scanner interface{ Scan(...any) error }
 
-func (s *Store) readRecord(row scanner) (history.Entry, error) {
+func (s *Store) readRecord(row scanner, extra ...any) (history.Entry, error) {
 	var entry history.Entry
 	var peer, id, ciphertext []byte
 	var direction, millis int64
-	err := row.Scan(&entry.Sequence, &peer, &direction, &id, &millis, &ciphertext)
+	fields := []any{&entry.Sequence, &peer, &direction, &id, &millis, &ciphertext}
+	err := row.Scan(append(fields, extra...)...)
 	if errors.Is(err, sql.ErrNoRows) {
 		return history.Entry{}, history.ErrNotFound
 	}

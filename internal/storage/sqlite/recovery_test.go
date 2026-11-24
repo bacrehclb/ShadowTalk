@@ -29,6 +29,14 @@ func TestHistoryProcessExitRecovery(t *testing.T) {
 		if _, added, err := s.Append(context.Background(), testMessage(1)); err != nil || !added {
 			t.Fatal("child commit", err)
 		}
+		queued, _, err := s.Enqueue(context.Background(), outgoing(3))
+		if err != nil {
+			t.Fatal(err)
+		}
+		now := queued.RecordedAt.Add(time.Minute)
+		if _, _, err := s.BeginAttempt(context.Background(), queued.Sequence, now, now.Add(time.Minute)); err != nil {
+			t.Fatal(err)
+		}
 		tx, err := s.db.Begin()
 		if err != nil {
 			t.Fatal(err)
@@ -66,6 +74,15 @@ func TestHistoryProcessExitRecovery(t *testing.T) {
 		t.Fatal("uncommitted placeholder survived", err)
 	}
 	appendTest(t, s, m)
+	// A crash after recording an attempt cannot leave an eternal in-flight row.
+	now := outgoing(3).RecordedAt.Add(time.Minute)
+	if items, err := s.Due(t.Context(), now, 10); err != nil || len(items) != 0 {
+		t.Fatal("crash lost recovery deadline", err)
+	}
+	items, err := s.Due(t.Context(), now.Add(2*time.Minute), 10)
+	if err != nil || len(items) != 1 || items[0].ID != outgoing(3).ID || items[0].Attempts != 1 {
+		t.Fatal("crashed attempt did not become retryable", err)
+	}
 }
 
 func TestHistoryLifetimeLockAcrossProcesses(t *testing.T) {

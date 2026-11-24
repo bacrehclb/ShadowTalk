@@ -5,6 +5,8 @@ import (
 	"errors"
 	"net"
 	"time"
+
+	"github.com/bacrehclb/ShadowTalk/internal/protocol"
 )
 
 // Send writes a previously created message exactly once. Success means the
@@ -13,13 +15,22 @@ import (
 // Calls on one dialog are serialized. Cancellation before acquiring the writer
 // leaves the connection usable; cancellation during I/O aborts that stream.
 func (d *Dialog) Send(ctx context.Context, message Message) error {
+	return d.writeFrame(ctx, message.frame())
+}
+
+// Acknowledge sends an explicit storage claim. Only the delivery layer should
+// call it, after committing the incoming record (including an identical retry).
+func (d *Dialog) Acknowledge(ctx context.Context, id protocol.MessageID) error {
+	return d.writeFrame(ctx, protocol.Frame{Type: protocol.TypeAck, ID: id})
+}
+
+func (d *Dialog) writeFrame(ctx context.Context, frame protocol.Frame) error {
 	if ctx == nil {
 		return ErrInvalidConfig
 	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	frame := message.frame()
 	if err := frame.Validate(); err != nil {
 		return err
 	}
