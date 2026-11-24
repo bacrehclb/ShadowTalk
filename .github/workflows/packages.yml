@@ -1,0 +1,156 @@
+name: Packages
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: packages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  archives:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          version: v2.20.3
+          args: check
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          version: v2.20.3
+          args: release --snapshot --clean --skip=publish
+      - run: python packaging/package.py verify
+      - name: Install and remove the Debian package on the runner
+        run: |
+          sudo dpkg -i dist/*_linux_amd64.deb
+          cd "$RUNNER_TEMP"
+          shadowtalk --version
+          shadowtalk --help
+          test -f /usr/share/doc/shadowtalk/docs/install.md
+          test -f /usr/share/doc/shadowtalk/docs/testing/tor-live-exchange.md
+          sudo dpkg -r shadowtalk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: archive-packages
+          if-no-files-found: error
+          retention-days: 7
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/*.deb
+            dist/*.rpm
+            dist/metadata.json
+            dist/**/shadowtalk.rb
+
+  macos:
+    needs: archives
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - uses: actions/download-artifact@v4
+        with:
+          name: archive-packages
+          path: dist
+      - run: python packaging/package.py verify
+      - run: python packaging/package.py macos
+      - name: Install and inspect the native package on the runner
+        run: |
+          case "$(uname -m)" in arm64) arch=arm64 ;; x86_64) arch=amd64 ;; *) exit 1 ;; esac
+          sudo installer -pkg dist/installers/*_darwin_${arch}.pkg -target /
+          cd "$RUNNER_TEMP"
+          /usr/local/bin/shadowtalk --version
+          /usr/local/bin/shadowtalk --help
+          pkgutil --files io.github.bacrehclb.shadowtalk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-installers
+          path: dist/installers/*
+          if-no-files-found: error
+          retention-days: 7
+
+  windows:
+    needs: archives
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - uses: actions/download-artifact@v4
+        with:
+          name: archive-packages
+          path: dist
+      - run: python packaging/package.py verify
+      - name: Build with the runner's Inno Setup
+        shell: pwsh
+        run: |
+          $compiler = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (!(Test-Path $compiler)) { throw "Inno Setup 6 is missing from this runner" }
+          python packaging/package.py windows --iscc $compiler
+          if ($LASTEXITCODE -ne 0) { throw "Installer build failed" }
+      - name: Verify install, upgrade, PATH and uninstall
+        shell: pwsh
+        run: ./packaging/windows/smoke.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-installers
+          path: dist/installers/*
+          if-no-files-found: error
+          retention-days: 7
+
+  collect:
+    needs: [archives, macos, windows]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: '*-packages'
+          path: dist/bundle
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: '*-installers'
+          path: dist/bundle
+          merge-multiple: true
+      - name: Checksum the complete distribution
+        run: python packaging/package.py checksums --dist dist/bundle
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shadowtalk-packages
+          path: dist/bundle
+          if-no-files-found: error
+          retention-days: 14

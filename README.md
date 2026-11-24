@@ -57,6 +57,15 @@ The `chat` command connects the UI to the network and persistent delivery. Local
 
 ## Quick start
 
+### Packaged builds
+
+The **Packages** workflow prepares development archives for Windows, macOS and
+Linux, macOS PKG/DMG installers, a Windows setup wizard, and Linux DEB/RPM packages.
+Download `shadowtalk-packages` from a successful workflow run; these are unsigned
+development snapshots, not a published alpha release. Go is not required to run
+them; Tor/Lyrebird and an OS credential store remain separate requirements.
+See [installation](docs/install.md) and [packaging/release status](docs/releases.md).
+
 ### Requirements
 
 - **Go 1.26 or newer** and Git to run from source.
