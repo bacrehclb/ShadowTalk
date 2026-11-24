@@ -32,7 +32,7 @@
 
 ShadowTalk is an open-source terminal messenger in development. The goal is simple: create a local identity, exchange invitations with someone you trust, and communicate through Tor onion services without a shared ShadowTalk server. A nickname is a display name; your cryptographic key is your identity.
 
-> **Early development:** profiles, signed invitations and local contacts are available. The chat core supports live text exchange, but terminal chat screens and message history are not available yet.
+> **Early development:** profiles, signed invitations and local contacts are available. The chat core supports live text exchange, and a separate encrypted history store is implemented. Automatic message persistence and terminal chat screens are still pending.
 >
 > The features and commands below describe the **[dev branch](https://github.com/bacrehclb/ShadowTalk/tree/dev)**. `main` currently contains an earlier code snapshot; use `dev` to try the current implementation.
 
@@ -48,8 +48,9 @@ ShadowTalk is an open-source terminal messenger in development. The goal is simp
 | Secure channel | TLS 1.3 with mutual verification of confirmed identity keys |
 | Tor transport | Managed Tor process and stable v3 onion address |
 | Peer sessions | Core API connecting profiles, contacts, Tor and TLS, with connection limits and cancellation |
-| Message protocol | Versioned text and acknowledgement frames, random message IDs and strict size limits; storage and delivery are pending |
+| Message protocol | Versioned text and acknowledgement frames, random message IDs and strict size limits; delivery handling is pending |
 | Chat core | Live conversations, text sending/receiving, bounded events and connection lifecycle; no automatic ACKs or retries |
+| History storage | SQLite with encrypted message text, duplicate detection and cursor pagination; not yet connected to chat events or UI |
 
 The network core is not connected to CLI/TUI commands yet. Local integration tests cover saved profiles, invitations and framed messages through TLS and simulated Tor processes; a complete exchange over the public Tor network has **not yet been verified**. The core uses a contact snapshot until restart. See the [Tor validation notes](https://github.com/bacrehclb/ShadowTalk/blob/dev/docs/tor.md).
 
@@ -158,7 +159,7 @@ go run ./cmd/shadowtalk --profile-dir ./data/demo ui
 
 The private seed is encrypted in `identity-seed.json`; its encryption key stays in the OS credential store. ShadowTalk does not use a separate application password or fall back to storing that key in plaintext. Copying the profile directory alone is **not a portable backup** of the identity.
 
-`profile.json` and `contacts.json` contain unencrypted public metadata, including contact relationships. A nickname or invitation signature does not replace fingerprint verification. This is an unfinished messenger, not a claim of security readiness; the [security notes](https://github.com/bacrehclb/ShadowTalk/blob/dev/docs/security.md) describe the mechanisms and their limits.
+`profile.json` and `contacts.json` contain unencrypted public metadata, including contact relationships. When used by the core API, `messages.db` encrypts message text with a profile-derived key; peers, IDs, directions, times and message lengths remain visible. The history store is not yet opened by CLI/TUI commands. A nickname or invitation signature does not replace fingerprint verification. This is an unfinished messenger, not a claim of security readiness; the [security notes](https://github.com/bacrehclb/ShadowTalk/blob/dev/docs/security.md) describe the mechanisms and their limits.
 
 ## Roadmap
 
@@ -172,7 +173,8 @@ The private seed is encrypted in `identity-seed.json`; its encryption key stays 
 - [ ] Connect peer sessions to CLI/TUI commands
 - [ ] Verify a complete exchange over the public Tor network
 - [ ] Terminal chat screen
-- [ ] Local message history, acknowledgements and delivery retries
+- [x] Encrypted local history storage API
+- [ ] Connect history to chat, acknowledgements and delivery retries
 - [ ] Release packaging for Windows, macOS and Linux
 
 Group rooms and a possible GUI are future directions; their scope is not committed. The terminal client comes first.
@@ -188,12 +190,13 @@ internal/
   identity/             Nicknames, identity keys and onion-key derivation
   contacts/             Signed invitations and contact rules
   chat/                 Live conversations, text exchange and application events
+  history/              Persistent message records and paginated history API
   peers/                Authenticated streams, connection limits and lifecycle
   protocol/             Message framing, IDs, versions and size limits
   onion/                Onion v3 address format
   securechannel/        TLS with mutual identity verification
   transport/tor/        Tor process, onion service and SOCKS connections
-  storage/              Profile files, contacts and OS credential store
+  storage/              Profile files, contacts, OS keys and encrypted SQLite history
   tui/                  Terminal profile screens
 docs/                   Architecture, protocol and design decisions
 tests/integration/      Tests across module and process boundaries
