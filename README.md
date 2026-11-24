@@ -53,7 +53,7 @@ ShadowTalk is an open-source terminal messenger in development. The goal is simp
 | History storage | SQLite with encrypted message text, duplicate detection and cursor pagination |
 | Delivery core | Persistent outbox, ACK after saving, retries after restart, and pending/delivered states in the terminal chat |
 
-The `chat` command connects the UI to the network and persistent delivery. Local terminal integration tests cover two CLI processes, saved profiles, TLS, simulated Tor, messages and restart; a complete exchange over the public Tor network has **not yet been verified**. The core uses a contact snapshot until restart. See the [Tor validation notes](https://github.com/bacrehclb/ShadowTalk/blob/dev/docs/tor.md).
+The `chat` command connects the UI to the network and persistent delivery. Local terminal integration tests cover two CLI processes, saved profiles, TLS, simulated Tor, messages and restart. On November 25, 2026, the live integration test passed through the public Tor network using obfs4: bidirectional delivery, durable ACKs and offline queue recovery after restarting both nodes. Both nodes ran on one macOS arm64 machine; separate-device and live Windows/Linux checks remain outstanding. The core uses a contact snapshot until restart. See the [live test report](docs/testing/tor-live-exchange.md).
 
 ## Quick start
 
@@ -162,7 +162,7 @@ The screen shows Tor's bootstrap percentage and stage, then contacts, history an
 
 Connection settings can be saved in `tor.json` inside the profile directory, or selected with `chat --tor-config "/path/to/tor.json"`. Explicit `--tor-binary` and `--startup-timeout` flags override the file. A missing default file uses direct Tor; an invalid file stops startup. Retrying with Enter / `r` reloads the file.
 
-For **obfs4 bridges**, configure a separate Lyrebird executable and your bridge lines. Tor and Lyrebird are available in the [Tor Expert Bundle](https://support.torproject.org/little-t-tor/circumvention/using-bridges/). See [connection configuration](docs/tor.md#конфигурация-подключения) for the JSON format and setup. Bridge mode never silently falls back to direct Tor. Complete delivery over a real bridge still needs verification.
+For **obfs4 bridges**, configure a separate Lyrebird executable and your bridge lines. Tor and Lyrebird are available in the [Tor Expert Bundle](https://support.torproject.org/little-t-tor/circumvention/using-bridges/). See [connection configuration](docs/tor.md#конфигурация-подключения) for the JSON format and setup. Bridge mode never silently falls back to direct Tor. Live delivery and restart recovery have been verified with obfs4 on macOS; bridge availability depends on your network.
 
 | Key | Chat action |
 | --- | --- |
@@ -207,7 +207,8 @@ The private seed is encrypted in `identity-seed.json`; its encryption key stays 
 - [x] Bounded text and acknowledgement wire protocol
 - [x] Live one-to-one chat core and events for the interface
 - [x] Connect peer sessions to CLI/TUI commands
-- [ ] Verify a complete exchange over the public Tor network
+- [x] Verify a complete exchange over the public Tor network (obfs4, macOS arm64)
+- [ ] Verify chat between separate devices and complete platform smoke checks
 - [x] Terminal chat screen
 - [x] Encrypted local history storage API
 - [x] Connect history to chat, acknowledgements and delivery retries
