@@ -27,10 +27,11 @@ CLI и TUI связывают метаданные, шифрование и хр
 | `internal/history` | Записи истории, поиск, страницы и контракт хранилища |
 | `internal/delivery` | Устойчивая очередь, подтверждения и устранение дублей |
 | `internal/protocol` | Сетевые сообщения, кодирование, версии и ограничения |
-| `internal/transport/tor` | Управление Tor и создание соединений |
+| `internal/transport/tor` | Управление Tor/Lyrebird, прогресс запуска и создание соединений |
 | `internal/securechannel` | Защищённое соединение и проверка ключа собеседника |
 | `internal/storage/profilefile` | Создание и загрузка метаданных профиля в JSON |
 | `internal/storage/contactsfile` | Книга контактов одного профиля и сериализация её изменений |
+| `internal/storage/torconfig` | Чтение и проверка настроек подключения Tor/obfs4 |
 | `internal/storage/keyring` | Запись и чтение ключа шифрования seed в хранилище ОС |
 | `internal/storage/profiledir` | Блокировка профиля, журнал создания и согласование файлов |
 | `internal/storage/seedfile` | Создание и загрузка файла зашифрованного seed |

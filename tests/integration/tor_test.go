@@ -12,6 +12,8 @@ import (
 	"github.com/bacrehclb/ShadowTalk/internal/chat"
 	"github.com/bacrehclb/ShadowTalk/internal/delivery"
 	"github.com/bacrehclb/ShadowTalk/internal/history"
+	"github.com/bacrehclb/ShadowTalk/internal/storage/torconfig"
+	"github.com/bacrehclb/ShadowTalk/internal/transport/tor"
 )
 
 // The same scenario runs in CI through a protocol-compatible local subprocess.
@@ -53,11 +55,25 @@ func TestTorSecureChannelLive(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 12*time.Minute)
 	defer cancel()
-	runTorDelivery(t, ctx, torDeliverySettings{
+	settings := torDeliverySettings{
 		binary: os.Getenv("SHADOWTALK_TOR_BINARY"), startup: 3 * time.Minute, exchange: 3 * time.Minute,
 		// Use the application's normal retry and recovery deadlines on real Tor.
 		delivery: delivery.Options{},
-	})
+		report: func(nickname string, p tor.Progress) {
+			t.Logf("%s: Tor phase=%d bootstrap=%d%% step=%d problem=%d", nickname, p.Phase, p.Percent, p.Step, p.Problem)
+		},
+	}
+	if path := os.Getenv("SHADOWTALK_TOR_CONFIG"); path != "" {
+		config, err := torconfig.Read(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		settings.connection, settings.startup = config.Connection, config.StartTimeout
+		if settings.binary == "" {
+			settings.binary = config.BinaryPath
+		}
+	}
+	runTorDelivery(t, ctx, settings)
 }
 
 func runTorDelivery(t *testing.T, ctx context.Context, settings torDeliverySettings) {

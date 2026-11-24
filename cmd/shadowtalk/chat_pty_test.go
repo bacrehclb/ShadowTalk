@@ -4,6 +4,8 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"os"
 	"os/exec"
@@ -20,6 +22,7 @@ import (
 	"github.com/bacrehclb/ShadowTalk/internal/storage/contactsfile"
 	"github.com/bacrehclb/ShadowTalk/internal/storage/profiledir"
 	"github.com/bacrehclb/ShadowTalk/internal/storage/sqlite"
+	"github.com/bacrehclb/ShadowTalk/internal/storage/torconfig"
 	"github.com/creack/pty"
 )
 
@@ -166,5 +169,52 @@ func TestChatRejectsUnsupportedTerminalsBeforeOpeningProfile(t *testing.T) {
 				t.Fatal("unsupported terminal created profile")
 			}
 		})
+	}
+}
+
+func TestChatLoadsConnectionConfigShowsProgressAndReloadsAfterFailure(t *testing.T) {
+	helper := chatTorHelper(t)
+	dir, keys := filepath.Join(t.TempDir(), "профиль с пробелами"), t.TempDir()
+	chatProfile(t, dir, keys, "alice")
+	path := filepath.Join(dir, torconfig.FileName)
+	config, err := json.Marshal(map[string]any{"version": 1, "mode": "direct", "tor_binary": helper, "startup_timeout": "1s"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, config, 0600); err != nil {
+		t.Fatal(err)
+	}
+	env := []string{"SHADOWTALK_FAKE_TOR=bootstrap-warning", "SHADOWTALK_FAKE_REGISTRY=" + t.TempDir()}
+	p := startTerminalArgs(t, dir, keys, false, false, false, env, "chat")
+	p.expect(0, "14%")
+	p.expect(0, "Не удалось открыть чат")
+	if strings.Contains(p.snapshot(), "PRIVATE") {
+		t.Fatal("raw Tor warning reached terminal")
+	}
+	if err := os.WriteFile(path, []byte(`{"version":1,"mode":"obfs4","bridges":["PRIVATE"]}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	mark := p.send("r")
+	p.expect(mark, "Неверная конфигурация Tor")
+	p.send("\x03")
+	p.finish(false)
+
+	// A subsequent launch picks up saved obfs4 settings without extra flags.
+	bridge := "obfs4 127.0.0.1:1 " + strings.Repeat("A", 40) + " cert=" + base64.RawStdEncoding.EncodeToString(make([]byte, 52)) + " iat-mode=0"
+	config, err = json.Marshal(map[string]any{"version": 1, "mode": "obfs4", "tor_binary": helper, "lyrebird_binary": helper, "bridges": []string{bridge}, "startup_timeout": "10s"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, config, 0600); err != nil {
+		t.Fatal(err)
+	}
+	env[0] = "SHADOWTALK_FAKE_TOR=normal"
+	restarted := startTerminalArgs(t, dir, keys, false, false, false, env, "chat")
+	restarted.expect(0, "Tor готов")
+	restarted.send("\x03")
+	restarted.finish(true)
+	paths, err := filepath.Glob(filepath.Join(dir, "tor", ".shadowtalk-run-*"))
+	if err != nil || len(paths) != 0 {
+		t.Fatal("runtime remained after obfs4 chat exit", err)
 	}
 }

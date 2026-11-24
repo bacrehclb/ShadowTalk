@@ -26,7 +26,13 @@ import (
 
 func TestMain(m *testing.M) {
 	if mode := os.Getenv("SHADOWTALK_FAKE_TOR"); mode != "" {
-		if err := runFakeTor(mode); err != nil {
+		var err error
+		if len(os.Args) == 1 && os.Getenv("TOR_PT_CLIENT_TRANSPORTS") == "obfs4" {
+			err = runFakePT(mode)
+		} else {
+			err = runFakeTor(mode)
+		}
+		if err != nil {
 			// No raw control commands or secret key bytes in helper diagnostics.
 			os.Exit(2)
 		}
@@ -184,6 +190,10 @@ func runFakeTor(mode string) error {
 					}
 					fmt.Fprintf(conn, "250-net/listeners/socks=%q\r\n250 OK\r\n", address)
 				case "status/bootstrap-phase":
+					if mode == "bootstrap-warning" {
+						fmt.Fprint(conn, "250-status/bootstrap-phase=WARN BOOTSTRAP PROGRESS=14 TAG=handshake SUMMARY=\"PRIVATE PROGRESS=100\" REASON=TIMEOUT WARNING=\"PRIVATE bridge cert\"\r\n250 OK\r\n")
+						continue
+					}
 					if !network {
 						return fmt.Errorf("network not enabled")
 					}

@@ -43,9 +43,18 @@ const (
 	ChatConnectingTor
 )
 
+// ChatStartup is presentation data supplied by the application adapter, never
+// raw transport diagnostics. Percent is shown only when HasPercent is true.
+type ChatStartup struct {
+	Stage      ChatStage
+	Detail     string
+	Percent    int
+	HasPercent bool
+}
+
 // OpenChat owns cleanup on failure. On success the runtime owns the session,
 // including a success arriving after the user has requested cancellation.
-type OpenChat func(context.Context, func(ChatStage)) (ChatSession, error)
+type OpenChat func(context.Context, func(ChatStartup)) (ChatSession, error)
 type ChatOptions struct {
 	InitialContact string
 	DescribeError  func(error) string
@@ -80,7 +89,7 @@ type chatRuntime struct {
 	ctx      context.Context
 	cancel   context.CancelFunc
 	open     OpenChat
-	stages   chan ChatStage
+	stages   chan ChatStartup
 	mu       sync.Mutex
 	closing  bool
 	session  ChatSession
@@ -92,7 +101,7 @@ type chatRuntime struct {
 
 func newChatRuntime(open OpenChat) *chatRuntime {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &chatRuntime{ctx: ctx, cancel: cancel, open: open, stages: make(chan ChatStage, 1)}
+	return &chatRuntime{ctx: ctx, cancel: cancel, open: open, stages: make(chan ChatStartup, 1)}
 }
 func (r *chatRuntime) begin() bool {
 	r.mu.Lock()
@@ -108,7 +117,7 @@ func (r *chatRuntime) openCmd() tea.Msg {
 		return chatOpened{err: context.Canceled}
 	}
 	defer r.workers.Done()
-	s, err := r.open(r.ctx, func(stage ChatStage) {
+	s, err := r.open(r.ctx, func(stage ChatStartup) {
 		select {
 		case <-r.stages:
 		default:

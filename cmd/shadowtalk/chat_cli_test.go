@@ -15,7 +15,7 @@ func TestChatCLIHelpAndInvalidInputHaveNoSideEffects(t *testing.T) {
 	profile := filepath.Join(work, "missing profile")
 	base := []string{"--profile-dir", profile, "chat"}
 	help := runCLIProcess(t, work, keys, []string{"SHADOWTALK_TEST_DENY=1"}, append(base, "--help")...)
-	if help.code != 0 || help.diagnostic != "" || !strings.Contains(help.out, "--tor-binary") || !strings.Contains(help.out, "Ctrl+C") {
+	if help.code != 0 || help.diagnostic != "" || !strings.Contains(help.out, "--tor-config") || !strings.Contains(help.out, "Ctrl+C") {
 		t.Fatalf("help: %+v", help)
 	}
 	for _, args := range [][]string{nil, {"--unknown"}, {"--contact"}, {"--contact", "bad alias"}, {"--startup-timeout", "0s"}, {"--startup-timeout", "16m"}, {"--tor-binary", ""}, {"unexpected"}} {

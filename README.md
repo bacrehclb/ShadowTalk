@@ -158,7 +158,11 @@ If Tor is not on PATH, specify its executable (including `tor.exe` on Windows):
 go run ./cmd/shadowtalk chat --tor-binary "/path/to/tor" --startup-timeout 5m
 ```
 
-The screen shows startup stages, then contacts, history and the message editor. The default Tor startup timeout is 3 minutes; `--startup-timeout` accepts 1 second to 15 minutes. History opens after Tor is ready. Omitting `--contact` selects the first saved contact. Contacts and invitations are managed using the commands above; restart chat to apply changes.
+The screen shows Tor's bootstrap percentage and stage, then contacts, history and the message editor. The default Tor startup timeout is 3 minutes; `--startup-timeout` accepts 1 second to 15 minutes. History opens after Tor is ready. Omitting `--contact` selects the first saved contact. Contacts and invitations are managed using the commands above; restart chat to apply changes.
+
+Connection settings can be saved in `tor.json` inside the profile directory, or selected with `chat --tor-config "/path/to/tor.json"`. Explicit `--tor-binary` and `--startup-timeout` flags override the file. A missing default file uses direct Tor; an invalid file stops startup. Retrying with Enter / `r` reloads the file.
+
+For **obfs4 bridges**, configure a separate Lyrebird executable and your bridge lines. Tor and Lyrebird are available in the [Tor Expert Bundle](https://support.torproject.org/little-t-tor/circumvention/using-bridges/). See [connection configuration](docs/tor.md#конфигурация-подключения) for the JSON format and setup. Bridge mode never silently falls back to direct Tor. Complete delivery over a real bridge still needs verification.
 
 | Key | Chat action |
 | --- | --- |
@@ -276,11 +280,14 @@ SHADOWTALK_NATIVE_KEYRING_TEST=1 go test ./cmd/shadowtalk -run '^TestNativeKeySt
 # Real Tor controller and onion key, without joining the Tor network.
 SHADOWTALK_TOR_BINARY=/absolute/path/to/tor go test ./internal/transport/tor -run '^TestNativeTorControl$' -count=1 -v
 
+# Real Lyrebird handshake and Tor bridge configuration, with networking disabled.
+SHADOWTALK_TOR_BINARY=/absolute/path/to/tor SHADOWTALK_LYREBIRD_BINARY=/absolute/path/to/lyrebird go test ./internal/transport/tor -run '^TestNativeObfs4Control$' -count=1 -v
+
 # Live Tor: bidirectional delivery, durable ACKs and offline queue recovery after restart.
 SHADOWTALK_TOR_BINARY=/absolute/path/to/tor SHADOWTALK_TOR_LIVE_TEST=1 go test ./tests/integration -run '^TestTorSecureChannelLive$' -count=1 -v -timeout=15m
 ```
 
-In PowerShell, set the corresponding variables with `$env:NAME = 'value'` before running `go test`. The live Tor check uses temporary profiles, synthetic keys and encrypted SQLite history. It stops the receiver, queues a message, restarts both nodes and checks automatic delivery without duplicate history. It allows 3 minutes per Tor startup and 12 minutes overall, and can time out when the network is unavailable. Regular CI runs the same scenario with local test processes; that does not verify public Tor connectivity. See [Tor validation notes](docs/tor.md#ошибки-и-проверки) for observed results.
+In PowerShell, set the corresponding variables with `$env:NAME = 'value'` before running `go test`. For a live bridge check, also set `SHADOWTALK_TOR_CONFIG` to your connection file; `SHADOWTALK_TOR_BINARY` overrides its binary path. The live Tor check uses temporary profiles, synthetic keys and encrypted SQLite history. It stops the receiver, queues a message, restarts both nodes and checks automatic delivery without duplicate history. By default it allows 3 minutes per Tor startup (configurable in the file) and 12 minutes overall, and can time out when the network is unavailable. Regular CI runs the same scenario with local test processes; that does not verify public Tor connectivity. See [Tor validation notes](docs/tor.md#ошибки-и-проверки) for observed results.
 
 </details>
 

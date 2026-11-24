@@ -57,15 +57,35 @@ func Start(ctx context.Context, keys identity.KeyPair, options Options) (_ *Node
 	defer clear(key[:])
 	startup, cancelStartup := context.WithTimeout(ctx, options.StartTimeout)
 	defer cancelStartup()
-	p, err := startProcess(options)
+	reporter := &progressReporter{callback: options.OnProgress}
+	phase := StartingProcess
+	if options.Connection.Mode == "obfs4" {
+		phase = StartingTransport
+	}
+	reporter.report(Progress{Phase: phase})
+	p, err := startProcess(startup, options)
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
 		if err != nil {
+			select {
+			case <-p.transportDone():
+				err = errors.Join(err, ErrObfs4Exited)
+			default:
+			}
 			err = errors.Join(err, p.close())
 		}
 	}()
+	// A failed PT must interrupt controller startup as well as live operation.
+	go func() {
+		select {
+		case <-p.transportDone():
+			cancelStartup()
+		case <-startup.Done():
+		}
+	}()
+	reporter.report(Progress{Phase: ConnectingController})
 	raw, err := p.connect(startup)
 	if err != nil {
 		return nil, startupError(startup, "connect controller", err)
@@ -79,7 +99,7 @@ func Start(ctx context.Context, keys identity.KeyPair, options Options) (_ *Node
 			_ = listener.Close()
 		}
 	}()
-	socks, err := configure(startup, raw, filepath.Join(p.runDir, "control.cookie"), &key, address, listener.Addr().String())
+	socks, err := configure(startup, raw, filepath.Join(p.runDir, "control.cookie"), &key, address, listener.Addr().String(), reporter)
 	if err != nil {
 		return nil, err
 	}
@@ -102,9 +122,12 @@ func Start(ctx context.Context, keys identity.KeyPair, options Options) (_ *Node
 			n.shutdown(ctx.Err())
 		case <-p.done:
 			n.shutdown(ErrProcessExited)
+		case <-p.transportDone():
+			n.shutdown(ErrObfs4Exited)
 		case <-n.done:
 		}
 	}()
+	reporter.report(Progress{Phase: Ready, Percent: 100, Step: BootstrapDone})
 	return n, nil
 }
 

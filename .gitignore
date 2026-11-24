@@ -25,6 +25,7 @@ profile-pending.json
 .shadowtalk.lock
 .shadowtalk-run-*/
 contacts.json
+tor.json
 .contacts.lock
 .contacts-*.tmp
 *.invite

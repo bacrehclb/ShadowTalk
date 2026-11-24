@@ -6,7 +6,6 @@ import (
 	"flag"
 	"io"
 	"os"
-	"path/filepath"
 	"slices"
 	"time"
 
@@ -25,11 +24,15 @@ import (
 )
 
 const chatUsage = `Использование:
-  shadowtalk [--profile-dir PATH] chat [--contact NAME] [--tor-binary PATH] [--startup-timeout 3m]
+  shadowtalk [--profile-dir PATH] chat [--contact NAME] [--tor-config PATH] [--tor-binary PATH] [--startup-timeout 3m]
 
 Открывает терминальный чат с сохранёнными контактами. Нужны терминальные stdin
 и stdout, окно от 60 × 20, существующий профиль и Tor (tor/tor.exe в PATH).
 --tor-binary задаёт исполняемый файл Tor; загрузки Tor из интернета нет.
+--tor-config выбирает JSON настроек; по умолчанию tor.json внутри профиля.
+Если tor.json отсутствует, используется прямое подключение. Ошибка файла
+останавливает запуск. Флаги --tor-binary и --startup-timeout имеют приоритет.
+Для obfs4 нужны mode=obfs4, lyrebird_binary и bridges в конфигурации.
 --startup-timeout ограничивает запуск Tor: от 1s до 15m, по умолчанию 3m.
 --contact выбирает начальный диалог по локальному имени.
 
@@ -49,9 +52,25 @@ func executeChat(args []string, directory string, stdin io.Reader, stdout io.Wri
 	flags := flag.NewFlagSet("chat", flag.ContinueOnError)
 	alias := flags.String("contact", "", "начальный контакт")
 	binary := flags.String("tor-binary", "tor", "исполняемый файл Tor")
+	config := flags.String("tor-config", "", "файл настроек Tor")
 	timeout := flags.Duration("startup-timeout", 3*time.Minute, "время запуска Tor")
 	if err := parseContactFlags(flags, args, stdout, chatUsage); err != nil {
 		return err
+	}
+	network := chatNetworkFlags{config: *config, binary: *binary, timeout: *timeout}
+	configSet := false
+	flags.Visit(func(f *flag.Flag) {
+		switch f.Name {
+		case "tor-binary":
+			network.binarySet = true
+		case "startup-timeout":
+			network.timeoutSet = true
+		case "tor-config":
+			configSet = true
+		}
+	})
+	if configSet && *config == "" {
+		return errors.New("укажите файл для --tor-config")
 	}
 	if *binary == "" || *timeout < time.Second || *timeout > 15*time.Minute {
 		return errors.New("неверные параметры Tor; используйте chat --help")
@@ -65,7 +84,14 @@ func executeChat(args []string, directory string, stdin io.Reader, stdout io.Wri
 	}
 	input, _ := stdin.(*os.File)
 	output, _ := stdout.(*os.File)
-	return tui.RunChat(chatOpener(path, keys, *alias, tor.Options{BinaryPath: *binary, DataDir: filepath.Join(path, "tor"), StartTimeout: *timeout}), input, output, tui.ChatOptions{InitialContact: *alias, DescribeError: chatUserError})
+	open := func(ctx context.Context, stage func(tui.ChatStartup)) (tui.ChatSession, error) {
+		options, err := network.options(path)
+		if err != nil {
+			return nil, err
+		}
+		return chatOpener(path, keys, *alias, options)(ctx, stage)
+	}
+	return tui.RunChat(open, input, output, tui.ChatOptions{InitialContact: *alias, DescribeError: chatUserError})
 }
 
 type profileLoadFunc func() (app.LoadedProfile, error)
@@ -77,12 +103,12 @@ type contactReadFunc func() (*contacts.Book, error)
 func (f contactReadFunc) Read() (*contacts.Book, error) { return f() }
 
 func chatOpener(path string, keys app.EncryptionKeys, alias string, options tor.Options) tui.OpenChat {
-	return func(ctx context.Context, stage func(tui.ChatStage)) (tui.ChatSession, error) {
+	return func(ctx context.Context, stage func(tui.ChatStartup)) (tui.ChatSession, error) {
 		var profile identity.Profile
 		var entries []contacts.Contact
 		profiles := app.NewProfiles(profiledir.New(path), keys)
 		p := app.NewPeerSessions(profileLoadFunc(func() (app.LoadedProfile, error) {
-			stage(tui.ChatLoadingProfile)
+			stage(tui.ChatStartup{Stage: tui.ChatLoadingProfile})
 			loaded, err := profiles.Load()
 			profile = loaded.Profile
 			return loaded, err
@@ -99,11 +125,12 @@ func chatOpener(path string, keys app.EncryptionKeys, alias string, options tor.
 			entries = book.List()
 			return book, nil
 		}), func(lifetime context.Context, k identity.KeyPair) (peers.Transport, error) {
-			stage(tui.ChatConnectingTor)
-			return tor.Start(lifetime, k, options)
+			local := options
+			local.OnProgress = func(p tor.Progress) { stage(chatTorProgress(p)) }
+			return tor.Start(lifetime, k, local)
 		})
 		service, err := p.StartDelivery(ctx, func(ctx context.Context, owner [32]byte, key []byte) (delivery.Store, error) {
-			stage(tui.ChatOpeningHistory)
+			stage(tui.ChatStartup{Stage: tui.ChatOpeningHistory})
 			return sqlite.Open(ctx, path, owner, key)
 		}, peers.Options{}, chat.Options{}, delivery.Options{})
 		if err != nil {
@@ -152,6 +179,9 @@ func (s *chatSession) History(ctx context.Context, peer [32]byte, q history.Quer
 }
 
 func chatUserError(err error) string {
+	if message := torConnectionError(err); message != "" {
+		return message
+	}
 	switch {
 	case errors.Is(err, tor.ErrUnavailable):
 		return "Tor не найден: установите Tor и задайте --tor-binary PATH либо добавьте его в PATH."

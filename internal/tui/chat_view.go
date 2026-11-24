@@ -75,13 +75,19 @@ func (m chatModel) View() tea.View {
 		content = "Увеличьте окно до 60 × 20.\nEsc / Ctrl+C — выход"
 	} else if m.opening {
 		stage := "Загрузка профиля и контактов"
-		switch m.stage {
+		switch m.stage.Stage {
 		case ChatOpeningHistory:
 			stage = "Открытие зашифрованной истории"
 		case ChatConnectingTor:
 			stage = "Подключение Tor и публикация адреса"
+			if m.stage.Detail != "" {
+				stage = "Подключение Tor: " + safeText(m.stage.Detail)
+			}
+			if m.stage.HasPercent {
+				stage += fmt.Sprintf(" · %d%%", max(0, min(100, m.stage.Percent)))
+			}
 		}
-		content = titleStyle.Render("SHADOWTALK") + "\n\n" + stage + fmt.Sprintf(" · %d с", m.seconds) + "\n\n" + "ОС может запросить доступ к ключам.\nПодключение Tor может занять несколько минут.\n\nEsc / Ctrl+C — отменить и выйти"
+		content = titleStyle.Render("SHADOWTALK") + "\n\n" + ansi.Hardwrap(stage+fmt.Sprintf(" · %d с", m.seconds), m.width, true) + "\n\n" + "ОС может запросить доступ к ключам.\nПодключение Tor может занять несколько минут.\n\nEsc / Ctrl+C — отменить и выйти"
 	} else if m.session == nil {
 		content = titleStyle.Render("SHADOWTALK") + "\n\nНе удалось открыть чат\n\n" + ansi.Hardwrap(m.describe(m.failure), m.width, true) + "\n\nEnter / r — повторить · Esc / Ctrl+C — выход"
 	} else {
