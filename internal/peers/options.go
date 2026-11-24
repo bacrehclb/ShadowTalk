@@ -31,6 +31,8 @@ type Options struct {
 	HandshakeTimeout time.Duration
 }
 
+func (o Options) Validate() error { _, err := o.defaults(); return err }
+
 func (o Options) defaults() (Options, error) {
 	if o.MaxConnections < 0 || o.MaxConnections > 1024 || o.MaxIncomingHandshakes < 0 ||
 		o.ConnectTimeout < 0 || o.HandshakeTimeout < 0 {

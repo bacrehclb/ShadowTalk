@@ -150,7 +150,7 @@ func TestHistoryNeverResetsUnsupportedOrDamagedDatabases(t *testing.T) {
 				statement := ""
 				switch kind {
 				case "future":
-					statement = "PRAGMA user_version=2"
+					statement = "PRAGMA user_version=99"
 					want = history.ErrUnsupportedVersion
 				case "foreign":
 					statement = "PRAGMA application_id=123"

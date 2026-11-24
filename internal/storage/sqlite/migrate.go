@@ -11,11 +11,14 @@ import (
 	"github.com/bacrehclb/ShadowTalk/internal/history"
 )
 
-const schemaVersion = 1
+const schemaVersion = 2
 const applicationID = 0x53544831 // STH1
 
 //go:embed migrations/0001_messages.sql
 var initialSchema string
+
+//go:embed migrations/0002_delivery.sql
+var deliverySchema string
 
 func (s *Store) initialize(ctx context.Context, root []byte) error {
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -44,15 +47,26 @@ func (s *Store) initialize(ctx context.Context, root []byte) error {
 		if version > schemaVersion {
 			return history.ErrUnsupportedVersion
 		}
-		if version != schemaVersion {
+		if version < 1 {
 			return history.ErrCorrupt
 		}
 		if err := s.loadKey(ctx, tx, root); err != nil {
 			return err
 		}
 	}
-	if err := validateSchema(ctx, tx); err != nil {
+	if err := validateSchema(ctx, tx, max(version, 1)); err != nil {
 		return err
+	}
+	if version < 2 {
+		if _, err := tx.ExecContext(ctx, deliverySchema); err != nil {
+			return storageError(err)
+		}
+		if _, err := tx.ExecContext(ctx, "PRAGMA user_version=2"); err != nil {
+			return storageError(err)
+		}
+		if err := validateSchema(ctx, tx, 2); err != nil {
+			return err
+		}
 	}
 	return storageError(tx.Commit())
 }
@@ -115,12 +129,16 @@ func (s *Store) loadKey(ctx context.Context, tx *sql.Tx, root []byte) error {
 	return nil
 }
 
-func validateSchema(ctx context.Context, tx *sql.Tx) error {
+func validateSchema(ctx context.Context, tx *sql.Tx, version int) error {
 	rows, err := tx.QueryContext(ctx, "SELECT type, name FROM sqlite_schema WHERE name NOT GLOB 'sqlite_*'")
 	if err != nil {
 		return storageError(err)
 	}
 	expected := map[string]string{"history_meta": "table", "messages": "table", "messages_peer_sequence": "index"}
+	if version >= 2 {
+		expected["outbox"] = "table"
+		expected["outbox_due"] = "index"
+	}
 	for rows.Next() {
 		var kind, name string
 		if err := rows.Scan(&kind, &name); err != nil {
@@ -151,5 +169,15 @@ func validateSchema(ctx context.Context, tx *sql.Tx) error {
 	if err != nil {
 		return history.ErrCorrupt
 	}
-	return storageError(rows.Close())
+	if err := rows.Close(); err != nil {
+		return storageError(err)
+	}
+	if version >= 2 {
+		rows, err = tx.QueryContext(ctx, "SELECT sequence, attempts, next_attempt, delivered_at FROM outbox LIMIT 0")
+		if err != nil {
+			return history.ErrCorrupt
+		}
+		return storageError(rows.Close())
+	}
+	return nil
 }
