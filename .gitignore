@@ -28,3 +28,8 @@ contacts.json
 .contacts.lock
 .contacts-*.tmp
 *.invite
+messages.db
+messages.db-wal
+messages.db-shm
+messages.db-journal
+.messages.lock
