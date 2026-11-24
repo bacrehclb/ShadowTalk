@@ -2,134 +2,149 @@ package integration
 
 import (
 	"context"
-	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
 	"github.com/bacrehclb/ShadowTalk/internal/chat"
-	"github.com/bacrehclb/ShadowTalk/internal/contacts"
-	"github.com/bacrehclb/ShadowTalk/internal/identity"
-	"github.com/bacrehclb/ShadowTalk/internal/peers"
-	"github.com/bacrehclb/ShadowTalk/internal/transport/tor"
+	"github.com/bacrehclb/ShadowTalk/internal/delivery"
+	"github.com/bacrehclb/ShadowTalk/internal/history"
 )
 
-// Explicit opt-in: two independent Tor processes publish services to the real
-// network. They exchange synthetic data with ephemeral identities, never a user
-// profile. The ordinary test suite and CI remain offline.
+// The same scenario runs in CI through a protocol-compatible local subprocess.
+// Only the Tor executable and time budgets differ from the opt-in live test.
+func TestTorDeliveryRestart(t *testing.T) {
+	binary := filepath.Join(t.TempDir(), "tor-helper")
+	if runtime.GOOS == "windows" {
+		binary += ".exe"
+	}
+	buildCtx, cancel := context.WithTimeout(t.Context(), time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(buildCtx, "go", "test", "-c", "-o", binary, "./internal/transport/tor")
+	cmd.Dir = filepath.Join("..", "..")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("build Tor fixture: %v\n%s", err, output)
+	}
+	t.Setenv("SHADOWTALK_FAKE_TOR", "normal")
+	t.Setenv("SHADOWTALK_FAKE_REGISTRY", t.TempDir())
+	ctx, stop := context.WithTimeout(t.Context(), time.Minute)
+	defer stop()
+	runTorDelivery(t, ctx, torDeliverySettings{
+		binary: binary, startup: 10 * time.Second, exchange: 10 * time.Second,
+		delivery: delivery.Options{
+			PollInterval: 10 * time.Millisecond, RetryMin: 50 * time.Millisecond, RetryMax: 100 * time.Millisecond,
+			AttemptTimeout: 2 * time.Second, AckTimeout: 100 * time.Millisecond,
+		},
+	})
+}
+
+// Explicit opt-in: two Tor processes publish services to the public network.
+// Profiles and messages are synthetic; the real OS credential store is unused.
+// Retain the original test name for existing scripts invoking the live check.
 func TestTorSecureChannelLive(t *testing.T) {
 	if os.Getenv("SHADOWTALK_TOR_LIVE_TEST") != "1" {
 		t.Skip("set SHADOWTALK_TOR_LIVE_TEST=1 and optionally SHADOWTALK_TOR_BINARY")
 	}
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+	if os.Getenv("SHADOWTALK_FAKE_TOR") != "" {
+		t.Fatal("unset SHADOWTALK_FAKE_TOR before running the live check")
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 12*time.Minute)
 	defer cancel()
-	aliceKeys, err := identity.GenerateKeyPair()
-	if err != nil {
-		t.Fatal(err)
-	}
-	bobKeys, err := identity.GenerateKeyPair()
-	if err != nil {
-		t.Fatal(err)
-	}
-	type result struct {
-		node *peers.Manager
-		err  error
-	}
-	start := func(keys, peerKeys identity.KeyPair, alias string) <-chan result {
-		resultCh := make(chan result, 1)
-		directory := filepath.Join(t.TempDir(), "tor")
-		address, err := peerKeys.OnionAddress()
+	runTorDelivery(t, ctx, torDeliverySettings{
+		binary: os.Getenv("SHADOWTALK_TOR_BINARY"), startup: 3 * time.Minute, exchange: 3 * time.Minute,
+		// Use the application's normal retry and recovery deadlines on real Tor.
+		delivery: delivery.Options{},
+	})
+}
+
+func runTorDelivery(t *testing.T, ctx context.Context, settings torDeliverySettings) {
+	t.Helper()
+	alice, bob := newTorDeliveryPeer(t, "alice"), newTorDeliveryPeer(t, "bob")
+	alice.addContact(t, bob)
+	bob.addContact(t, alice)
+	startTorDeliveryPair(t, ctx, settings, alice, bob)
+	t.Log("both nodes bootstrapped and published onion descriptors")
+
+	queue := func(from, to *torDeliveryPeer, text string) chat.Message {
+		t.Helper()
+		message, err := chat.NewMessage(text)
 		if err != nil {
 			t.Fatal(err)
 		}
-		book, err := contacts.RestoreBook([32]byte(keys.PublicKey()), []contacts.Contact{{
-			Alias: alias, Nickname: alias, PublicKey: [32]byte(peerKeys.PublicKey()), Onion: address, AddedAt: time.Now().UTC(),
-		}})
-		if err != nil {
+		item, added, err := from.service.Queue(ctx, to.profile.PublicKey, message)
+		if err != nil || !added || item.ID != message.ID || item.State != delivery.Pending {
+			t.Fatalf("%s queue: added=%v, error=%v", from.profile.Nickname, added, err)
+		}
+		return message
+	}
+	ack := func(from, to *torDeliveryPeer, message chat.Message) delivery.Item {
+		t.Helper()
+		return waitTorDelivery(t, ctx, settings.exchange, from, to, message, "delivery ACK", func(item delivery.Item) bool {
+			return item.State == delivery.Delivered && item.Attempts > 0 && !item.DeliveredAt.IsZero()
+		})
+	}
+	hello := queue(alice, bob, "Привет через Tor 👋")
+	ack(alice, bob, hello)
+	wantAlice := []torHistoryMessage{{history.Outgoing, hello}}
+	wantBob := []torHistoryMessage{{history.Incoming, hello}}
+	assertTorHistory(t, ctx, bob.service, alice.profile.PublicKey, wantBob)
+
+	reply := queue(bob, alice, "authenticated Tor reply")
+	ack(bob, alice, reply)
+	wantAlice = append(wantAlice, torHistoryMessage{history.Incoming, reply})
+	wantBob = append(wantBob, torHistoryMessage{history.Outgoing, reply})
+	assertTorHistory(t, ctx, alice.service, bob.profile.PublicKey, wantAlice)
+	t.Log("bidirectional messages saved and acknowledged over pinned TLS")
+
+	// Close the receiver before enqueueing: the next message cannot be ACKed.
+	if err := bob.close(); err != nil {
+		t.Fatal(err)
+	}
+	offline := queue(alice, bob, "queued offline; survives restarting both peers")
+	waitTorDelivery(t, ctx, settings.exchange, alice, bob, offline, "offline attempt", func(item delivery.Item) bool {
+		return item.State == delivery.Pending && item.Attempts > 0
+	})
+	if err := alice.close(); err != nil {
+		t.Fatal(err)
+	}
+	wantAlice = append(wantAlice, torHistoryMessage{history.Outgoing, offline})
+	var attempts int64
+	alice.inspect(t, ctx, func(store delivery.Store) {
+		assertTorHistory(t, ctx, store, bob.profile.PublicKey, wantAlice)
+		item, err := store.Status(ctx, bob.profile.PublicKey, offline.ID)
+		if err != nil || item.State != delivery.Pending || item.Attempts == 0 || item.NextAttempt.IsZero() {
+			t.Fatalf("pending queue did not persist: %v", err)
+		}
+		attempts = item.Attempts
+	})
+	bob.inspect(t, ctx, func(store delivery.Store) {
+		assertTorHistory(t, ctx, store, alice.profile.PublicKey, wantBob)
+	})
+	t.Log("offline message remains pending on disk; both nodes stopped cleanly")
+
+	// Reload the saved seeds, contacts and SQLite files; never re-enqueue offline.
+	startTorDeliveryPair(t, ctx, settings, alice, bob)
+	t.Log("both nodes restarted; waiting for the persistent queue to resume")
+	if resumed := ack(alice, bob, offline); resumed.Attempts <= attempts {
+		t.Fatal("queue did not make a new attempt after restart")
+	}
+	wantBob = append(wantBob, torHistoryMessage{history.Incoming, offline})
+	assertTorHistory(t, ctx, bob.service, alice.profile.PublicKey, wantBob)
+	for _, peer := range []*torDeliveryPeer{alice, bob} {
+		if err := peer.close(); err != nil {
 			t.Fatal(err)
 		}
-		go func() {
-			node, err := peers.Start(ctx, keys, book, peers.Options{HandshakeTimeout: time.Minute}, func(lifetime context.Context) (peers.Transport, error) {
-				return tor.Start(lifetime, keys, tor.Options{BinaryPath: os.Getenv("SHADOWTALK_TOR_BINARY"), DataDir: directory})
-			})
-			resultCh <- result{node, err}
-		}()
-		return resultCh
 	}
-	aliceCh, bobCh := start(aliceKeys, bobKeys, "bob"), start(bobKeys, aliceKeys, "alice")
-	alice, bob := <-aliceCh, <-bobCh
-	for _, item := range []result{alice, bob} {
-		if item.node != nil {
-			defer item.node.Close()
-		}
-	}
-	if err := errors.Join(alice.err, bob.err); err != nil {
-		t.Fatal(err)
-	}
-	t.Log("both Tor nodes bootstrapped and published onion descriptors")
-	aliceChat, err := chat.Start(ctx, liveChatSessions{alice.node}, chat.Options{WriteTimeout: time.Minute, FrameTimeout: time.Minute})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer aliceChat.Close()
-	bobChat, err := chat.Start(ctx, liveChatSessions{bob.node}, chat.Options{WriteTimeout: time.Minute, FrameTimeout: time.Minute})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer bobChat.Close()
-	outgoing, err := aliceChat.Connect(ctx, "bob")
-	if err != nil {
-		t.Fatal(err)
-	}
-	message, err := chat.NewMessage("Привет через Tor 👋")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := outgoing.Send(ctx, message); err != nil {
-		t.Fatal(err)
-	}
-	receive := func(service *chat.Service, message chat.Message, key [32]byte) {
-		select {
-		case e := <-service.Events():
-			if e.Kind != chat.MessageReceived || e.Message != message || e.Peer.PublicKey != key {
-				t.Fatalf("unexpected event: %+v", e)
-			}
-		case <-ctx.Done():
-			t.Fatal(ctx.Err())
-		}
-	}
-	receive(bobChat, message, [32]byte(aliceKeys.PublicKey()))
-	dialogs := bobChat.Dialogs()
-	if len(dialogs) != 1 {
-		t.Fatal("missing incoming conversation")
-	}
-	reply, err := chat.NewMessage("authenticated Tor reply")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := dialogs[0].Send(ctx, reply); err != nil {
-		t.Fatal(err)
-	}
-	receive(aliceChat, reply, [32]byte(bobKeys.PublicKey()))
-	t.Log("bidirectional chat over mutually authenticated TLS through the real Tor network succeeded")
-}
-
-// Adapt the concrete peer sessions without changing production interfaces.
-type liveChatSessions struct{ *peers.Manager }
-
-func (s liveChatSessions) Connect(ctx context.Context, alias string) (chat.Session, error) {
-	session, err := s.Manager.Connect(ctx, alias)
-	if err != nil {
-		return nil, err
-	}
-	return session, nil
-}
-
-func (s liveChatSessions) Accept(ctx context.Context) (chat.Session, error) {
-	session, err := s.Manager.Accept(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return session, nil
+	alice.inspect(t, ctx, func(store delivery.Store) {
+		assertTorHistory(t, ctx, store, bob.profile.PublicKey, wantAlice)
+		assertTorDelivered(t, ctx, store, bob.profile.PublicKey, hello, offline)
+	})
+	bob.inspect(t, ctx, func(store delivery.Store) {
+		assertTorHistory(t, ctx, store, alice.profile.PublicKey, wantBob)
+		assertTorDelivered(t, ctx, store, alice.profile.PublicKey, reply)
+	})
+	t.Log("restart recovery passed: exact message IDs, no duplicate history, durable ACK status, released stores and Tor runtime files")
 }
