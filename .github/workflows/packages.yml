@@ -6,12 +6,18 @@ on:
   push:
     branches: [dev, main]
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      release:
+        description: Build the checked-out alpha tag instead of a snapshot
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: packages-${{ github.ref }}
+  group: packages-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -30,14 +36,28 @@ jobs:
         with:
           python-version: '3.13'
       - run: python -m unittest discover -s packaging -p 'test_*.py'
+      - name: Validate the tagged source
+        if: inputs.release
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_COMMIT: ${{ github.sha }}
+        run: python packaging/release.py check-source --tag "$RELEASE_TAG" --commit "$RELEASE_COMMIT"
       - uses: goreleaser/goreleaser-action@v7
         with:
           version: v2.20.3
           args: check
-      - uses: goreleaser/goreleaser-action@v7
+      - name: Build a development snapshot
+        if: ${{ !inputs.release }}
+        uses: goreleaser/goreleaser-action@v7
         with:
           version: v2.20.3
           args: release --snapshot --clean --skip=publish
+      - name: Build the alpha version
+        if: inputs.release
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          version: v2.20.3
+          args: release --clean --skip=publish
       - run: python packaging/package.py verify
       - name: Install and remove the Debian package on the runner
         run: |
