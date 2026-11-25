@@ -232,18 +232,23 @@ Pushing that tag starts **Alpha release**:
    `docs/releases/TAG.md`. A tag on an unmerged feature branch is rejected.
 2. Run the existing Go tests, vet and build on all three operating systems.
 3. Reuse **Packages** without `--snapshot`. Native installer checks still run.
-4. Verify the bundle's tag/commit metadata, exact file inventory and every
-   SHA-256 checksum. Flatten the cask path and regenerate the final manifest.
+4. Verify the complete CI bundle's tag/commit metadata, exact file inventory
+   and every SHA-256 checksum. Select the public installers and notices, then
+   generate a manifest covering only those downloads.
 5. Use `gh release create --verify-tag --draft --prerelease --latest=false` to
    create an **unpublished** release. Publication is the maintainer's final
    manual action in GitHub Releases.
 
-The draft includes five portable archives, four DEB/RPM packages, four macOS
-PKG/DMG files, one Windows setup EXE, `metadata.json`, the generated
-`shadowtalk.rb` recipe, `THIRD_PARTY_NOTICES.txt` and `checksums.txt`.
-Notes identify the source commit.
-Only artifacts from this workflow run are used. Source archives automatically
-provided by GitHub are separate from our checksummed release assets.
+The draft has **nine uploaded assets**: two macOS DMGs, one Windows setup EXE,
+four Linux DEB/RPM packages, `THIRD_PARTY_NOTICES.txt` and `checksums.txt`.
+Each DMG contains its PKG installer. Five portable archives, standalone PKGs,
+`metadata.json` and the generated cask stay in the complete `shadowtalk-packages`
+CI artifact for verification and local repackaging. That artifact retains its
+own complete checksum manifest; the public manifest covers only public files.
+Notes identify the source commit, so metadata need not be a user download.
+Only artifacts from this workflow run are used. The two source archives
+[automatically provided by GitHub](https://docs.github.com/en/repositories/releasing-projects-on-github/about-releases)
+are separate from these nine uploaded assets and their checksum manifest.
 
 There is deliberately no automatic overwrite of existing releases. A rerun
 stops if that tag already has a draft or a published release. If an upload
@@ -264,12 +269,15 @@ gh run download RUN_ID --name shadowtalk-packages --dir dist/alpha-input
 python3 packaging/package.py macos --dist dist/alpha-input \
   --dmg-template ../ShadowTalk-design/dmg/ShadowTalk.dmgcanvas
 
-# Replace all four matching macOS files, including the PKGs inside the DMGs.
+# Update all four macOS files in the full LOCAL bundle, including standalone PKGs.
 mv dist/alpha-input/installers/* dist/alpha-input/
 rmdir dist/alpha-input/installers
 python3 packaging/package.py checksums --dist dist/alpha-input
+
+# Stage public downloads with the reviewed compact exporter on main.
+git switch main
 python3 packaging/release.py prepare --tag v0.1.0-alpha.1 \
-  --commit "$(git rev-parse HEAD)" \
+  --commit "$(git rev-parse 'v0.1.0-alpha.1^{commit}')" \
   --bundle dist/alpha-input --output dist/alpha-custom
 ```
 
@@ -278,23 +286,32 @@ PKG matches the accompanying architecture-specific PKG. Finish any signing and
 notarization before recalculating sums; modifying a PKG requires repackaging its
 DMG too. The helper does not sign files. Trial Canvas builds retain the watermark.
 
-While the GitHub release is still a **draft**, replace its four macOS assets and
+The original `v0.1.0-alpha.1` tag predates compact public selection. Merge that
+exporter change into `main` before the final staging command above; switching
+back selects downloads from the completed tag bundle without rebuilding its
+binaries. Do not move the existing tag to include this packaging-policy change.
+
+While the GitHub release is still a **draft**, replace its two DMG assets and
 `checksums.txt` with the matching files in `dist/alpha-custom/assets/`. Other
 assets must remain identical to the downloaded bundle. Download the draft's
 final assets and verify the manifest before publishing. After signing, update
 the unsigned-build wording in the draft notes to describe exactly what was signed.
 Do not use this replacement procedure on a published release.
 
-`prepare` is local-only: it neither uploads nor publishes. It refuses snapshots,
-mixed versions/commits, missing or unexpected files, broken checksums and reused
-output directories. A checksum proves correspondence to the supplied manifest;
+`prepare` is local-only: it neither uploads nor publishes. It validates the full
+CI bundle before selecting the public files; damage to an unpublished archive
+or cask still fails validation. It refuses snapshots, mixed versions/commits,
+missing or unexpected files, broken checksums and reused output directories.
+A checksum proves correspondence to the supplied manifest;
 it does not establish who built or signed a file.
 
 ### Homebrew and Linux
 
 The cask is generated with `skip_upload: true`. A public
 `bacrehclb/homebrew-tap` repository is a later distribution step; it has not been
-created here. Publish matching release assets before the cask. The intended
+created here. Its recipe references portable archives, which the compact public
+set does not upload. A usable public tap requires a separate decision about
+hosting those archives. The intended
 `brew install --cask bacrehclb/tap/shadowtalk` command is not usable yet.
 Linux DEB/RPM packages install locally through `apt`/`dnf` without an APT/YUM
 repository. See [installation instructions](install.md).

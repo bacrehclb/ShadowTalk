@@ -23,7 +23,7 @@ class ReleaseBundleTests(unittest.TestCase):
         self.bundle = self.root / "сборка with spaces"
         self.output = self.root / "staged"
         self.bundle.mkdir()
-        # Match the published matrix independently of the manifest generator.
+        # Match the full CI matrix independently of the manifest generator.
         targets = {
             "darwin_arm64": ("tar.gz", "pkg", "dmg"),
             "darwin_amd64": ("tar.gz", "pkg", "dmg"),
@@ -48,24 +48,30 @@ class ReleaseBundleTests(unittest.TestCase):
     def prepare(self):
         release.prepare(release.ROOT, self.bundle, self.output, TAG, COMMIT)
 
-    def test_cli_stages_complete_flat_assets_with_matching_checksums(self):
+    def test_cli_stages_only_public_downloads_with_matching_checksums(self):
         result = subprocess.run([
             sys.executable, str(Path(release.__file__)), "prepare", "--tag", TAG,
             "--commit", COMMIT, "--bundle", str(self.bundle), "--output", str(self.output),
         ], capture_output=True, text=True, encoding="utf-8", timeout=10)
         self.assertEqual(result.returncode, 0, result.stderr)
         assets = self.output / "assets"
-        self.assertEqual(len(list(assets.iterdir())), 18)
+        expected = {"checksums.txt", "THIRD_PARTY_NOTICES.txt",
+                    "shadowtalk_0.1.0-alpha.1_windows_amd64_setup.exe"}
+        for arch in ("arm64", "amd64"):
+            expected.add(f"shadowtalk_0.1.0-alpha.1_darwin_{arch}.dmg")
+            for extension in ("deb", "rpm"):
+                expected.add(f"shadowtalk_0.1.0-alpha.1_linux_{arch}.{extension}")
+        self.assertEqual({p.name for p in assets.iterdir()}, expected)
+        self.assertEqual(len(expected), 9)
         names = set()
         for line in (assets / "checksums.txt").read_text().splitlines():
             checksum, name = line.split("  ")
             self.assertNotIn("/", name)
             self.assertEqual(checksum, hashlib.sha256((assets / name).read_bytes()).hexdigest())
+            self.assertEqual((assets / name).read_bytes(), (self.bundle / name).read_bytes())
             names.add(name)
         self.assertEqual(names, {p.name for p in assets.iterdir()} - {"checksums.txt"})
         self.assertIn(COMMIT, (self.output / "release-notes.md").read_text())
-        self.assertEqual((assets / "shadowtalk.rb").read_bytes(),
-                         (self.bundle / "homebrew/Casks/shadowtalk.rb").read_bytes())
         self.assertEqual((assets / "THIRD_PARTY_NOTICES.txt").read_bytes(),
                          (self.bundle / "THIRD_PARTY_NOTICES.txt").read_bytes())
 
@@ -102,7 +108,7 @@ class ReleaseBundleTests(unittest.TestCase):
             self.prepare()
         self.assertFalse(self.output.exists())
 
-    def test_rejects_corruption_and_stale_checksums(self):
+    def test_rejects_corruption_even_in_an_artifact_not_published(self):
         cask = self.bundle / "homebrew/Casks/shadowtalk.rb"
         cask.write_text("changed after checksumming")
         with self.assertRaisesRegex(ValueError, "corrupted"):

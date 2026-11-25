@@ -50,6 +50,7 @@ def check_source(root, tag, commit):
 
 
 def bundle_names(version):
+    """Complete CI input, including intermediate and maintainer artifacts."""
     prefix = f"shadowtalk_{version}"
     names = {"metadata.json", "homebrew/Casks/shadowtalk.rb", package.NOTICES}
     for arch in ("arm64", "amd64"):
@@ -58,6 +59,17 @@ def bundle_names(version):
         for extension in ("tar.gz", "deb", "rpm"):
             names.add(f"{prefix}_linux_{arch}.{extension}")
     names.update({f"{prefix}_windows_amd64.zip", f"{prefix}_windows_amd64_setup.exe"})
+    return names
+
+
+def public_asset_names(version):
+    """User downloads; checksum generation adds the ninth file."""
+    prefix = f"shadowtalk_{version}"
+    names = {package.NOTICES, f"{prefix}_windows_amd64_setup.exe"}
+    for arch in ("arm64", "amd64"):
+        names.add(f"{prefix}_darwin_{arch}.dmg")
+        for extension in ("deb", "rpm"):
+            names.add(f"{prefix}_linux_{arch}.{extension}")
     return names
 
 
@@ -102,13 +114,14 @@ def prepare(root, bundle, output, tag, commit):
     # is deliberately not reused: stale release files must never be uploaded.
     if output.exists():
         raise ValueError("output already exists; choose a new staging directory")
-    names = validate_bundle(bundle, tag, commit)
+    validate_bundle(bundle, tag, commit)
+    names = public_asset_names(version_for(tag, commit))
     notes = notes_for(root, tag)
     assets = output / "assets"
     assets.mkdir(parents=True)
     for name in sorted(names):
         shutil.copy2(bundle / name, assets / Path(name).name)
-    # Release assets have flat names, unlike the workflow artifact's cask path.
+    # The public manifest covers only the selected downloads, not the CI bundle.
     package.checksums(assets)
     (output / "release-notes.md").write_text(
         notes.rstrip() + f"\n\nBuilt from `{tag}` at commit `{commit}`.\n", encoding="utf-8")
