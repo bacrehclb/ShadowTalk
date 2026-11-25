@@ -63,6 +63,56 @@ run `python3 packaging/package.py checksums --dist PATH` to create the final
 recursive SHA-256 manifest. Do not distribute the earlier checksum list as if
 it covered installers.
 
+## Custom macOS disk image (optional)
+
+The standard build above uses `hdiutil` and requires no DMG Canvas license.
+For a custom background, volume icon and layout, keep the editable
+[DMG Canvas 4](https://www.araelium.com/dmgcanvas) project **outside this
+repository**. Back up that directory separately; it is not included in Git.
+For example:
+
+```text
+../ShadowTalk-design/dmg/
+  ShadowTalk.dmgcanvas/    editable project, including embedded artwork
+  assets/                 original background, icon source and .icns
+  input/                  preview-only PKG and Quick Start.txt
+```
+
+The project's content list must have exactly two regular files named
+`Install ShadowTalk.pkg` and `Quick Start.txt`, without aliases or extra payloads.
+Keep those names when editing the layout. Preview inputs may be old: the build
+script replaces both paths with fresh staged files **for each architecture**,
+without modifying the project. Artwork is embedded in the Canvas project;
+it is not copied into the Go source or portable archives.
+
+After the GoReleaser snapshot build, run:
+
+```sh
+python3 packaging/package.py macos \
+  --dmg-template ../ShadowTalk-design/dmg/ShadowTalk.dmgcanvas
+```
+
+The helper defaults to
+`/Applications/DMG Canvas.app/Contents/Resources/dmgcanvas`. Use
+`--dmgcanvas "/path/to/DMG Canvas.app/Contents/Resources/dmgcanvas"` to select
+another official installation. The script always skips Canvas signing and
+notarization; signing belongs in the separate release step. It never installs
+the resulting PKG. Trial builds retain DMG Canvas's watermark.
+
+Open both resulting DMGs and check the background, volume icon, readable file
+names and current package contents before sharing them. The `.icns` in the
+external design directory is also available for a future application bundle;
+the current product installs a terminal command, not a GUI `.app`.
+
+CI continues to build the standard DMG without private design files or a paid
+tool. To distribute the custom DMGs, assemble them with the other final release
+files and recalculate checksums after all packaging/signing is complete.
+The integration checks run with:
+
+```sh
+python3 -m unittest discover -s packaging -p 'test_*.py'
+```
+
 ## CI artifacts
 
 The **Packages** workflow runs for PRs targeting `dev`/`main`, pushes to those

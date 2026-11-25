@@ -1,4 +1,5 @@
-ShadowTalk — terminal P2P messenger
+SHADOWTALK
+Terminal conversations over Tor.
 
 Open "Install ShadowTalk.pkg" to install the command into /usr/local/bin.
 Then open Terminal and run:
@@ -6,9 +7,20 @@ Then open Terminal and run:
     shadowtalk --version
     shadowtalk ui
 
-This is a CLI/TUI application. It has no desktop chat window.
-Tor and Lyrebird are separate dependencies; see the installed documentation in
-/usr/local/share/doc/shadowtalk or https://github.com/bacrehclb/ShadowTalk.
+Configure Tor (and Lyrebird for obfs4 bridges), exchange invitations with your
+contact, then run:
+
+    shadowtalk chat
+
+Go is not required. Tor and Lyrebird are separate dependencies.
+Each device needs its own profile and access to its OS credential store.
+
+Setup instructions:
+https://github.com/bacrehclb/ShadowTalk/blob/dev/docs/install.md
+https://github.com/bacrehclb/ShadowTalk/blob/dev/README.md
+https://github.com/bacrehclb/ShadowTalk/blob/dev/README.ru.md
+
+Installed documentation: /usr/local/share/doc/shadowtalk
 
 Development packages are not Developer ID signed or notarized. A successful
 build does not establish trust in a downloaded copy. Verify its origin and
