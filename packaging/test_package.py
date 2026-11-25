@@ -1,13 +1,41 @@
-"""Checks for the optional, external DMG Canvas integration."""
+"""Checks for archive contents and the optional, external DMG Canvas integration."""
 
 import json
 from pathlib import Path
 import subprocess
 import sys
+import tarfile
 import tempfile
 import unittest
 
 import package
+
+
+class ArchiveNoticeTests(unittest.TestCase):
+    def test_archive_must_include_the_current_notice_report(self):
+        with tempfile.TemporaryDirectory(prefix="shadowtalk-archive-test-") as temporary:
+            root = Path(temporary)
+            (root / "metadata.json").write_text(json.dumps(dict(version="0.1.0", commit="fixture")))
+            (root / "THIRD_PARTY_NOTICES.txt").write_bytes(b"ShadowTalk third-party notices\ncurrent")
+            contents = root / "contents"
+            for name in ("LICENSE", "README.md", "README.ru.md", "shadowtalk",
+                         "docs/install.md", "docs/tor.md", "docs/testing/tor-live-exchange.md"):
+                path = contents / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b"fixture")
+            for report, error in ((None, "missing distribution files"),
+                                  (b"outdated", "third-party notices differ")):
+                with self.subTest(report=report):
+                    if report is not None:
+                        (contents / "THIRD_PARTY_NOTICES.txt").write_bytes(report)
+                    archive = root / "shadowtalk_0.1.0_darwin_arm64.tar.gz"
+                    with tarfile.open(archive, "w:gz") as stream:
+                        for path in contents.rglob("*"):
+                            if path.is_file():
+                                stream.add(path, arcname=path.relative_to(contents).as_posix())
+                    # Validation fails before trying to execute the fixture binary.
+                    with self.assertRaisesRegex(ValueError, error):
+                        package.verify(root)
 
 
 class CanvasTests(unittest.TestCase):

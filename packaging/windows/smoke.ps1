@@ -22,6 +22,9 @@ try {
     $basePath = "$originalPath;C:\ShadowTalk smoke unrelated;"
     [Environment]::SetEnvironmentVariable('Path', $basePath, 'User')
     Invoke-Installer
+    $expectedNotices = Get-FileHash "$PSScriptRoot\..\..\dist\THIRD_PARTY_NOTICES.txt" -Algorithm SHA256
+    $installedNotices = Get-FileHash "$directory\THIRD_PARTY_NOTICES.txt" -Algorithm SHA256
+    if ($expectedNotices.Hash -cne $installedNotices.Hash) { throw 'Installed third-party notices mismatch' }
     $installedPath = [Environment]::GetEnvironmentVariable('Path', 'User')
     if (@($installedPath.Split(';') | Where-Object { $_ -eq $directory }).Count -ne 1) {
         throw 'PATH entry missing or duplicated'

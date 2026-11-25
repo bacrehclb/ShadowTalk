@@ -58,10 +58,13 @@ jobs:
         with:
           version: v2.20.3
           args: release --clean --skip=publish
+      - name: Stage the standalone notice report
+        run: cp bin/notices/THIRD_PARTY_NOTICES.txt dist/THIRD_PARTY_NOTICES.txt
       - run: python packaging/package.py verify
       - name: Install and remove the Debian package on the runner
         run: |
           sudo dpkg -i dist/*_linux_amd64.deb
+          cmp dist/THIRD_PARTY_NOTICES.txt /usr/share/doc/shadowtalk/THIRD_PARTY_NOTICES.txt
           cd "$RUNNER_TEMP"
           shadowtalk --version
           shadowtalk --help
@@ -79,6 +82,7 @@ jobs:
             dist/*.deb
             dist/*.rpm
             dist/metadata.json
+            dist/THIRD_PARTY_NOTICES.txt
             dist/**/shadowtalk.rb
 
   macos:
@@ -102,6 +106,7 @@ jobs:
         run: |
           case "$(uname -m)" in arm64) arch=arm64 ;; x86_64) arch=amd64 ;; *) exit 1 ;; esac
           sudo installer -pkg dist/installers/*_darwin_${arch}.pkg -target /
+          cmp dist/THIRD_PARTY_NOTICES.txt /usr/local/share/doc/shadowtalk/THIRD_PARTY_NOTICES.txt
           cd "$RUNNER_TEMP"
           /usr/local/bin/shadowtalk --version
           /usr/local/bin/shadowtalk --help

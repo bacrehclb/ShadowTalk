@@ -17,6 +17,9 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_DMGCANVAS = Path("/Applications/DMG Canvas.app/Contents/Resources/dmgcanvas")
+NOTICES = "THIRD_PARTY_NOTICES.txt"
+TARGETS = (("darwin", "arm64"), ("darwin", "amd64"), ("linux", "arm64"),
+           ("linux", "amd64"), ("windows", "amd64"))
 
 
 def run(*args):
@@ -79,7 +82,7 @@ def macos(dist, version, template=None, dmgcanvas=DEFAULT_DMGCANVAS):
             binary.chmod(0o755)
             docs = payload / "usr/local/share/doc/shadowtalk"
             docs.mkdir(parents=True)
-            for filename in ("LICENSE", "README.md", "README.ru.md"):
+            for filename in ("LICENSE", NOTICES, "README.md", "README.ru.md"):
                 shutil.copy2(work / "archive" / filename, docs / Path(filename).name)
             shutil.copytree(work / "archive/docs", docs / "docs")
             component = work / "component.pkg"
@@ -145,11 +148,12 @@ def verify(dist):
     version = metadata["version"]
     host_os = {"darwin": "darwin", "linux": "linux", "win32": "windows"}[sys.platform]
     host_arch = {"arm64": "arm64", "aarch64": "arm64", "amd64": "amd64", "x86_64": "amd64"}[platform.machine().lower()]
-    targets = (("darwin", "arm64"), ("darwin", "amd64"), ("linux", "arm64"),
-               ("linux", "amd64"), ("windows", "amd64"))
-    required = {"LICENSE", "README.md", "README.ru.md", "docs/install.md", "docs/tor.md",
+    notices = (dist / NOTICES).read_bytes()
+    if not notices.startswith(b"ShadowTalk third-party notices\n"):
+        raise ValueError("missing or invalid generated third-party notices")
+    required = {"LICENSE", NOTICES, "README.md", "README.ru.md", "docs/install.md", "docs/tor.md",
                 "docs/testing/tor-live-exchange.md"}
-    for target_os, arch in targets:
+    for target_os, arch in TARGETS:
         suffix = "zip" if target_os == "windows" else "tar.gz"
         archive = dist / f"shadowtalk_{version}_{target_os}_{arch}.{suffix}"
         with tempfile.TemporaryDirectory(prefix="shadowtalk-verify-") as temporary:
@@ -160,7 +164,9 @@ def verify(dist):
             executable = "shadowtalk.exe" if target_os == "windows" else "shadowtalk"
             if not (required | {executable}).issubset(names):
                 raise ValueError(f"missing distribution files in {archive.name}")
-            if any(name not in {executable, "LICENSE", "README.md", "README.ru.md"}
+            if (work / "unpacked" / NOTICES).read_bytes() != notices:
+                raise ValueError(f"third-party notices differ in {archive.name}")
+            if any(name not in {executable, "LICENSE", NOTICES, "README.md", "README.ru.md"}
                    and not (name.startswith("docs/") and name.endswith(".md")) for name in names):
                 raise ValueError(f"unexpected distribution files in {archive.name}")
             if (target_os, arch) == (host_os, host_arch):

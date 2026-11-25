@@ -51,7 +51,7 @@ def check_source(root, tag, commit):
 
 def bundle_names(version):
     prefix = f"shadowtalk_{version}"
-    names = {"metadata.json", "homebrew/Casks/shadowtalk.rb"}
+    names = {"metadata.json", "homebrew/Casks/shadowtalk.rb", package.NOTICES}
     for arch in ("arm64", "amd64"):
         for extension in ("tar.gz", "pkg", "dmg"):
             names.add(f"{prefix}_darwin_{arch}.{extension}")

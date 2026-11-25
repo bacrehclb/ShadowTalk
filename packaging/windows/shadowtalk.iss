@@ -37,6 +37,7 @@ Name: "addtopath"; Description: "Add ShadowTalk to the current user's PATH (open
 [Files]
 Source: "{#SourceDir}\shadowtalk.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#SourceDir}\THIRD_PARTY_NOTICES.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\README*.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\docs\*"; DestDir: "{app}\docs"; Flags: ignoreversion recursesubdirs
 

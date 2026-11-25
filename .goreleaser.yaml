@@ -1,6 +1,10 @@
 version: 2
 project_name: shadowtalk
 
+before:
+  hooks:
+    - python3 packaging/notices.py
+
 builds:
   - id: shadowtalk
     main: ./cmd/shadowtalk
@@ -24,6 +28,8 @@ archives:
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files:
       - LICENSE
+      - src: bin/notices/THIRD_PARTY_NOTICES.txt
+        strip_parent: true
       - README.md
       - README.ru.md
       - docs/*.md
@@ -42,6 +48,8 @@ nfpms:
     contents:
       - src: LICENSE
         dst: /usr/share/doc/shadowtalk/LICENSE
+      - src: bin/notices/THIRD_PARTY_NOTICES.txt
+        dst: /usr/share/doc/shadowtalk/THIRD_PARTY_NOTICES.txt
       - src: README.md
         dst: /usr/share/doc/shadowtalk/README.md
       - src: README.ru.md
@@ -67,6 +75,8 @@ homebrew_casks:
 checksum:
   name_template: checksums.txt
   algorithm: sha256
+  extra_files:
+    - glob: bin/notices/THIRD_PARTY_NOTICES.txt
 
 snapshot:
   version_template: "{{ .Version }}-snapshot.{{ .ShortCommit }}"
