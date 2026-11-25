@@ -9,6 +9,7 @@
 /coverage.html
 *.test
 *.prof
+__pycache__/
 
 # Local configuration and runtime data
 .env
@@ -18,3 +19,19 @@
 /run/
 profile.json
 .profile-*.tmp
+identity-seed.json
+.identity-seed-*.tmp
+profile-pending.json
+.profile.lock
+.shadowtalk.lock
+.shadowtalk-run-*/
+contacts.json
+tor.json
+.contacts.lock
+.contacts-*.tmp
+*.invite
+messages.db
+messages.db-wal
+messages.db-shm
+messages.db-journal
+.messages.lock

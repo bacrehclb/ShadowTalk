@@ -4,6 +4,7 @@ package profilefile
 
 import (
 	"bytes"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,7 +19,7 @@ import (
 
 const (
 	fileName       = "profile.json"
-	formatVersion  = 1
+	formatVersion  = 2
 	maxProfileSize = 4096
 )
 
@@ -29,6 +30,7 @@ type record struct {
 	Version   int       `json:"version"`
 	Nickname  string    `json:"nickname"`
 	CreatedAt time.Time `json:"created_at"`
+	PublicKey string    `json:"public_key,omitempty"`
 }
 
 type Store struct {
@@ -41,14 +43,39 @@ func New(directory string) *Store {
 }
 
 func (s *Store) Create(profile identity.Profile) error {
+	return s.write(profile, false)
+}
+
+// Upgrade attaches an identity to matching legacy metadata. The caller must
+// hold the profile directory lock and retain its recovery journal until done.
+func (s *Store) Upgrade(profile identity.Profile) error {
+	if !profile.HasIdentity() {
+		return identity.ErrInvalidProfile
+	}
+	old, err := s.Load()
+	if err != nil {
+		return err
+	}
+	if old.HasIdentity() || old.Nickname != profile.Nickname || !old.CreatedAt.Equal(profile.CreatedAt) {
+		return identity.ErrProfileExists
+	}
+	return s.write(profile, true)
+}
+
+func (s *Store) write(profile identity.Profile, replace bool) error {
 	if err := profile.Validate(); err != nil {
 		return err
 	}
-	data, err := json.MarshalIndent(record{
-		Version:   formatVersion,
+	saved := record{
+		Version:   1,
 		Nickname:  profile.Nickname,
 		CreatedAt: profile.CreatedAt.UTC(),
-	}, "", "  ")
+	}
+	if profile.HasIdentity() {
+		saved.Version = formatVersion
+		saved.PublicKey = hex.EncodeToString(profile.PublicKey[:])
+	}
+	data, err := json.MarshalIndent(saved, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode profile: %w", err)
 	}
@@ -74,6 +101,12 @@ func (s *Store) Create(profile identity.Profile) error {
 	if err := temporary.Close(); err != nil {
 		return fmt.Errorf("close profile: %w", err)
 	}
+	if replace {
+		if err := os.Rename(temporary.Name(), filepath.Join(s.directory, fileName)); err != nil {
+			return fmt.Errorf("upgrade profile: %w", err)
+		}
+		return nil
+	}
 
 	// Link publishes the complete file without replacing an existing entry.
 	// Unlike a check followed by Rename, this also protects concurrent creators.
@@ -88,6 +121,17 @@ func (s *Store) Create(profile identity.Profile) error {
 }
 
 func (s *Store) Load() (identity.Profile, error) {
+	// Avoid opening a special file such as a FIFO.
+	info, err := os.Stat(filepath.Join(s.directory, fileName))
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return identity.Profile{}, identity.ErrProfileNotFound
+		}
+		return identity.Profile{}, fmt.Errorf("stat profile: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return identity.Profile{}, identity.ErrInvalidProfile
+	}
 	file, err := os.Open(filepath.Join(s.directory, fileName))
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -97,7 +141,7 @@ func (s *Store) Load() (identity.Profile, error) {
 	}
 	defer file.Close()
 
-	info, err := file.Stat()
+	info, err = file.Stat()
 	if err != nil {
 		return identity.Profile{}, fmt.Errorf("stat profile: %w", err)
 	}
@@ -116,7 +160,7 @@ func (s *Store) Load() (identity.Profile, error) {
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&saved); err != nil {
-		return identity.Profile{}, fmt.Errorf("%w: decode record: %v", identity.ErrInvalidProfile, err)
+		return identity.Profile{}, fmt.Errorf("%w: cannot decode record", identity.ErrInvalidProfile)
 	}
 	if err := decoder.Decode(new(any)); !errors.Is(err, io.EOF) {
 		return identity.Profile{}, fmt.Errorf("%w: trailing data", identity.ErrInvalidProfile)
@@ -124,12 +168,25 @@ func (s *Store) Load() (identity.Profile, error) {
 	if saved == nil || saved.Version < 1 {
 		return identity.Profile{}, fmt.Errorf("%w: missing format version", identity.ErrInvalidProfile)
 	}
-	if saved.Version != formatVersion {
+	if saved.Version != 1 && saved.Version != formatVersion {
 		return identity.Profile{}, fmt.Errorf("%w: %d", ErrUnsupportedVersion, saved.Version)
 	}
 	profile := identity.Profile{
 		Nickname:  saved.Nickname,
 		CreatedAt: saved.CreatedAt.UTC(),
+	}
+	if saved.Version == 1 && saved.PublicKey != "" {
+		return identity.Profile{}, identity.ErrInvalidProfile
+	}
+	if saved.Version == formatVersion {
+		publicKey, err := hex.DecodeString(saved.PublicKey)
+		if err != nil || len(publicKey) != len(profile.PublicKey) {
+			return identity.Profile{}, identity.ErrInvalidProfile
+		}
+		copy(profile.PublicKey[:], publicKey)
+		if !profile.HasIdentity() {
+			return identity.Profile{}, identity.ErrInvalidProfile
+		}
 	}
 	if err := profile.Validate(); err != nil {
 		return identity.Profile{}, fmt.Errorf("%w: %v", identity.ErrInvalidProfile, err)

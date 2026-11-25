@@ -1,0 +1,81 @@
+name: Alpha release
+
+on:
+  push:
+    tags: ['v*.*.*-alpha.*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: alpha-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Require an alpha tag from main with release notes
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_COMMIT: ${{ github.sha }}
+        run: python packaging/release.py check-source --tag "$RELEASE_TAG" --commit "$RELEASE_COMMIT"
+
+  tests:
+    needs: source
+    uses: ./.github/workflows/test.yml
+
+  packages:
+    needs: tests
+    uses: ./.github/workflows/packages.yml
+    with:
+      release: true
+
+  draft:
+    needs: packages
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - uses: actions/download-artifact@v4
+        with:
+          name: shadowtalk-packages
+          path: dist/bundle
+      - name: Validate and stage the exact release assets
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_COMMIT: ${{ github.sha }}
+        run: |
+          python packaging/release.py check-source --tag "$RELEASE_TAG" --commit "$RELEASE_COMMIT"
+          python packaging/release.py prepare --tag "$RELEASE_TAG" --commit "$RELEASE_COMMIT" \
+            --bundle dist/bundle --output dist/release
+      - name: Create the unpublished prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh api --paginate "repos/$GH_REPO/releases?per_page=100" --jq '.[].tag_name' > "$RUNNER_TEMP/release-tags.txt"
+          if grep -Fxq -- "$RELEASE_TAG" "$RUNNER_TEMP/release-tags.txt"; then
+            echo "A release already exists for this tag. Inspect it before retrying; no assets were changed." >&2
+            exit 1
+          fi
+          gh release create "$RELEASE_TAG" dist/release/assets/* \
+            --verify-tag --draft --prerelease --latest=false \
+            --title "ShadowTalk $RELEASE_TAG" --notes-file dist/release/release-notes.md

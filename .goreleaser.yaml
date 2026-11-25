@@ -1,0 +1,89 @@
+version: 2
+project_name: shadowtalk
+
+before:
+  hooks:
+    - python3 packaging/notices.py
+
+builds:
+  - id: shadowtalk
+    main: ./cmd/shadowtalk
+    binary: shadowtalk
+    env: [CGO_ENABLED=0]
+    goos: [darwin, linux, windows]
+    goarch: [amd64, arm64]
+    ignore:
+      - goos: windows
+        goarch: arm64
+    flags: [-trimpath]
+    ldflags:
+      - -s -w -X main.version={{ .Version }} -X main.commit={{ .FullCommit }} -X main.date={{ .Date }}
+
+archives:
+  - id: portable
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - src: bin/notices/THIRD_PARTY_NOTICES.txt
+        strip_parent: true
+      - README.md
+      - README.ru.md
+      - docs/*.md
+      - docs/**/*.md
+
+nfpms:
+  - id: linux
+    package_name: shadowtalk
+    file_name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    homepage: https://github.com/bacrehclb/ShadowTalk
+    maintainer: bacrehclb
+    description: Terminal P2P messenger using Tor onion services. Requires Tor and an unlocked Secret Service.
+    license: MIT
+    formats: [deb, rpm]
+    bindir: /usr/bin
+    contents:
+      - src: LICENSE
+        dst: /usr/share/doc/shadowtalk/LICENSE
+      - src: bin/notices/THIRD_PARTY_NOTICES.txt
+        dst: /usr/share/doc/shadowtalk/THIRD_PARTY_NOTICES.txt
+      - src: README.md
+        dst: /usr/share/doc/shadowtalk/README.md
+      - src: README.ru.md
+        dst: /usr/share/doc/shadowtalk/README.ru.md
+      - src: docs/
+        dst: /usr/share/doc/shadowtalk/docs/
+        type: tree
+
+homebrew_casks:
+  - name: shadowtalk
+    ids: [portable]
+    binaries: [shadowtalk]
+    homepage: https://github.com/bacrehclb/ShadowTalk
+    description: Terminal P2P messenger using Tor onion services
+    url:
+      template: "https://github.com/bacrehclb/ShadowTalk/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
+    # Generate the recipe locally; a public tap is a separate release step.
+    skip_upload: true
+    repository:
+      owner: bacrehclb
+      name: homebrew-tap
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+  extra_files:
+    - glob: bin/notices/THIRD_PARTY_NOTICES.txt
+
+snapshot:
+  version_template: "{{ .Version }}-snapshot.{{ .ShortCommit }}"
+
+changelog:
+  disable: true
+
+# CI produces reviewable artifacts. Publication is intentionally a separate step.
+release:
+  disable: true
