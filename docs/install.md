@@ -6,6 +6,12 @@ version and read its alpha limitations. Until a release is published, or to
 test development code, download `shadowtalk-packages` from a successful workflow
 run on the intended commit. An unpublished release draft is not a public download.
 
+A public release contains seven installers: two macOS DMGs, one Windows setup
+EXE and four Linux DEB/RPM packages, plus checksums and dependency notices.
+Download one installer for your platform. Portable archives and standalone PKGs
+are available in the full `shadowtalk-packages` CI artifact, not as release assets.
+GitHub's **Source code** ZIP/tarball downloads are the repository sources.
+
 The artifact contains a `checksums.txt` SHA-256 manifest. On macOS use
 `shasum -a 256 -c checksums.txt`; on Linux use `sha256sum -c checksums.txt`.
 On Windows, compare `Get-FileHash .\FILE -Algorithm SHA256` with its manifest
@@ -34,16 +40,20 @@ The native Installer puts the command in `/usr/local/bin/shadowtalk` and
 documentation in `/usr/local/share/doc/shadowtalk`. It requires administrator
 access and does not create a desktop `.app` or modify shell configuration.
 
-**Terminal installation:** download the matching `.pkg`, verify its checksum,
+**Terminal installation:** download the matching `.dmg`, verify its checksum,
 then substitute its exact filename:
 
 ```sh
-sudo installer -pkg ./shadowtalk_VERSION_darwin_ARCH.pkg -target /
+hdiutil attach ./shadowtalk_VERSION_darwin_ARCH.dmg
+sudo installer -pkg "/Volumes/ShadowTalk/Install ShadowTalk.pkg" -target /
+hdiutil detach "/Volumes/ShadowTalk"
 shadowtalk --version
 ```
 
-Alternatively, unpack the `.tar.gz` and run `./shadowtalk --version` directly,
-without an installer. Install only one copy into a given command location.
+Use the volume path reported by `hdiutil` if it differs. The CI artifact also
+contains a standalone PKG and a portable `.tar.gz`; the latter can be unpacked
+and run with `./shadowtalk --version`. Install only one copy into a given command
+location.
 
 The current development builds are **not Developer ID signed or notarized**.
 macOS may block downloaded packages. Public distribution with publisher trust
@@ -59,7 +69,7 @@ To remove a PKG installation, remove `/usr/local/bin/shadowtalk` and
 `sudo pkgutil --forget io.github.bacrehclb.shadowtalk`. Only do this for a
 PKG-managed copy; it preserves the profile and Keychain entries.
 
-## Windows: setup wizard or portable ZIP
+## Windows: setup wizard
 
 Run `shadowtalk_VERSION_windows_amd64_setup.exe`. It installs for the current
 user in `%LOCALAPPDATA%\Programs\ShadowTalk` without requesting administrator
@@ -72,15 +82,15 @@ shadowtalk --version
 shadowtalk ui
 ```
 
-The portable ZIP is also available: extract it, open PowerShell in that folder,
-and run `.\shadowtalk.exe --version`. Development installers are not Authenticode
+The CI artifact also contains a portable ZIP: extract it, open PowerShell in that
+folder, and run `.\shadowtalk.exe --version`. Current installers are not Authenticode
 signed, so Windows may show an unknown-publisher warning.
 
 Uninstall through Windows Settings or the Start menu entry. The uninstaller
 removes program files and only the PATH entry added by the installer; profiles,
 messages and credentials are retained.
 
-## Linux: packages or portable archive
+## Linux: DEB or RPM package
 
 Linux supports both package files and command-line installation. Download the
 correct architecture and substitute the exact filename:
@@ -102,7 +112,7 @@ dependencies; an unlocked desktop login session is the simplest starting point.
 Remove with `sudo apt remove shadowtalk` or `sudo dnf remove shadowtalk`.
 Profiles and OS credentials are outside the package and remain intact.
 
-The `.tar.gz` provides a portable binary for other distributions. Extract it
+The `.tar.gz` in the CI artifact provides a portable binary for other distributions. Extract it
 and run `./shadowtalk --version`. A hosted APT/RPM repository is a separate
 distribution step; `apt install shadowtalk` alone will not find this project.
 
