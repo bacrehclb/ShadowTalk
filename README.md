@@ -4,16 +4,16 @@
 
   <p>
     <b>A peer-to-peer messenger for your terminal.</b><br>
-    Built in Go. Designed for Tor. Identity through cryptographic keys.
+    Built in Go. Connects through Tor. Identity through cryptographic keys.
   </p>
 
   <p>
     <a href="https://go.dev/dl/"><img src="https://img.shields.io/badge/Go-1.26%2B-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Go 1.26 or newer"></a>
-    <a href="https://github.com/bacrehclb/ShadowTalk/actions/workflows/test.yml?query=branch%3Adev"><img src="https://img.shields.io/github/actions/workflow/status/bacrehclb/ShadowTalk/test.yml?branch=dev&event=push&style=flat-square&label=tests%20%28dev%29" alt="Tests on dev"></a>
+    <a href="https://github.com/bacrehclb/ShadowTalk/actions/workflows/test.yml?query=branch%3Amain"><img src="https://img.shields.io/github/actions/workflow/status/bacrehclb/ShadowTalk/test.yml?branch=main&event=push&style=flat-square&label=tests%20%28main%29" alt="Tests on main"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="MIT License"></a>
     <br>
     <img src="https://img.shields.io/badge/Platforms-Windows%20%7C%20macOS%20%7C%20Linux-64748b?style=flat-square" alt="Windows, macOS and Linux">
-    <img src="https://img.shields.io/badge/Status-early%20development-d97706?style=flat-square" alt="Early development">
+    <img src="https://img.shields.io/badge/Status-experimental-d97706?style=flat-square" alt="Experimental">
   </p>
 
   <p><b>English</b> · <a href="README.ru.md">Русский</a></p>
@@ -30,15 +30,15 @@
 
 ## Overview
 
-ShadowTalk is an open-source terminal messenger in development. The goal is simple: create a local identity, exchange invitations with someone you trust, and communicate through Tor onion services without a shared ShadowTalk server. A nickname is a display name; your cryptographic key is your identity.
+ShadowTalk is an open-source terminal messenger written in Go. Create a local identity, exchange invitations with someone you trust, and communicate through Tor onion services without a shared ShadowTalk server. A nickname is a display name; your cryptographic key is your identity.
 
-> **Early development:** profiles, signed invitations and local contacts are available. The core supports live text exchange, encrypted history and persistent delivery retries. The terminal chat is available through `shadowtalk chat`.
+> **Experimental alpha:** one-to-one terminal chat, encrypted message history and delivery retries are implemented. Commands and storage formats may change between alpha versions. There has been no independent security audit.
 >
-> Active development happens on **[dev](https://github.com/bacrehclb/ShadowTalk/tree/dev)**. For a tagged build, use its release notes and bundled documentation; commands may change between alpha versions.
+> Active development happens on **[dev](https://github.com/bacrehclb/ShadowTalk/tree/dev)**. For a released version, use its tag, release notes and bundled documentation.
 
 ## What works today
 
-| Component | Current implementation in `dev` |
+| Feature | Available behavior |
 | --- | --- |
 | Local identity | Ed25519 keys, a full SHA-256 fingerprint and a persistent profile |
 | Key storage | AES-256-GCM encrypted seed; encryption key stored in the OS credential store |
@@ -47,40 +47,51 @@ ShadowTalk is an open-source terminal messenger in development. The goal is simp
 | Contacts | Local aliases, explicit fingerprint confirmation and persistent storage |
 | Secure channel | TLS 1.3 with mutual verification of confirmed identity keys |
 | Tor transport | Managed Tor process and stable v3 onion address |
-| Peer sessions | Core API connecting profiles, contacts, Tor and TLS, with connection limits and cancellation |
-| Message protocol | Versioned text and acknowledgement frames, random message IDs and strict size limits |
-| Chat core | Live conversations, text sending/receiving, bounded events and connection lifecycle; no automatic ACKs or retries |
-| History storage | SQLite with encrypted message text, duplicate detection and cursor pagination |
-| Delivery core | Persistent outbox, ACK after saving, retries after restart, and pending/delivered states in the terminal chat |
+| History | Encrypted message text, duplicate detection and paginated history |
+| Delivery | Persistent outgoing queue, acknowledgement after saving, retries after restart and pending/delivered states |
+| Distribution | Portable archives, macOS PKG/DMG, Windows setup EXE and Linux DEB/RPM |
 
-The `chat` command connects the UI to the network and persistent delivery. Local terminal integration tests cover two CLI processes, saved profiles, TLS, simulated Tor, messages and restart. On November 25, 2026, the live integration test passed through the public Tor network using obfs4: bidirectional delivery, durable ACKs and offline queue recovery after restarting both nodes. Both nodes ran on one macOS arm64 machine; separate-device and live Windows/Linux checks remain outstanding. The core uses a contact snapshot until restart. See the [live test report](docs/testing/tor-live-exchange.md).
+Live delivery and restart recovery were verified through the public Tor network using obfs4 with two nodes on one macOS arm64 computer. Separate-device exchange and live Windows/Linux networking remain unverified. See the [live test report](docs/testing/tor-live-exchange.md) for the exact scope.
 
 ## Quick start
 
 ### Packaged builds
 
-The **Packages** workflow prepares development archives for Windows, macOS and
-Linux, macOS PKG/DMG installers, a Windows setup wizard, and Linux DEB/RPM packages.
-Published versions appear in [GitHub Releases](https://github.com/bacrehclb/ShadowTalk/releases).
-For development snapshots, download `shadowtalk-packages` from a successful
-**Packages** run. Alpha tags go through tests and packaging before producing an
-unpublished release draft for maintainer review. Current packages are unsigned.
-Go is not required to run them; Tor/Lyrebird and an OS credential store remain separate requirements.
-See [installation](docs/install.md) and [packaging/release status](docs/releases.md).
+Choose a published version from [GitHub Releases](https://github.com/bacrehclb/ShadowTalk/releases)
+and follow the [installation guide](docs/install.md). If no release is available,
+use the `shadowtalk-packages` artifact from a successful
+[Packages run](https://github.com/bacrehclb/ShadowTalk/actions/workflows/packages.yml?query=branch%3Adev)
+on the intended commit. Read the version's limitations before installing.
+
+| Platform | Architectures | Downloads |
+| --- | --- | --- |
+| macOS | Apple Silicon (`arm64`), Intel (`amd64`) | `.dmg`, `.pkg`, `.tar.gz` |
+| Windows | x64 (`amd64`) | `_setup.exe`, `.zip` |
+| Linux | `arm64`, `amd64` | `.deb`, `.rpm`, `.tar.gz` |
+
+Packages include a dependency notice file and are distributed with SHA-256
+checksums. Current builds are unsigned; macOS builds are not notarized.
+Go is only needed to [build from source](#development).
 
 ### Requirements
 
-- **Go 1.26 or newer** and Git to run from source.
+- **Tor** for chat; **Lyrebird** as well when using obfs4 bridges. Install these separately and follow the [connection guide](docs/tor.md).
 - **An accessible OS credential store:** Keychain on macOS, Credential Manager on Windows, or Secret Service over a user D-Bus session on Linux. Linux needs a running secret service with an available login/default collection; D-Bus alone is not enough.
 - **An interactive terminal:** at least 40 × 20 for the profile UI and 60 × 20 for chat.
 
-Tor is not needed for the profile and contact commands below. The chat command requires a separate Tor executable; see the [transport guide](https://github.com/bacrehclb/ShadowTalk/blob/dev/docs/tor.md).
+### Create your profile
+
+After installation, open a terminal and run:
 
 ```sh
-git clone --branch dev https://github.com/bacrehclb/ShadowTalk.git
-cd ShadowTalk
-go run ./cmd/shadowtalk ui
+shadowtalk --version
+shadowtalk ui
 ```
+
+The examples below use `shadowtalk` on PATH. For a portable archive, use
+`./shadowtalk` on macOS/Linux or `.\shadowtalk.exe` in PowerShell from the
+extracted directory. For a source build, use the binary path shown under
+[Development](#development). Profile and contact commands work without Tor.
 
 Enter a nickname and press **Enter** to create your profile. On subsequent launches, ShadowTalk loads the same identity. Your OS may ask you to unlock or allow access to its credential store.
 
@@ -101,13 +112,13 @@ The interface and command output are currently in Russian. The TUI requires term
 If you have not created a profile through the TUI:
 
 ```sh
-go run ./cmd/shadowtalk profile create --nick alice_01
+shadowtalk profile create --nick alice_01
 ```
 
 View your profile and public-key fingerprint:
 
 ```sh
-go run ./cmd/shadowtalk profile show
+shadowtalk profile show
 ```
 
 Creating a profile does not overwrite an existing one. `profile upgrade` adds keys to an older profile that only contains metadata. `profile recover` handles interrupted creation; it cannot restore a lost OS encryption key.
@@ -117,27 +128,27 @@ Creating a profile does not overwrite an existing one. `profile upgrade` adds ke
 Create an invitation and send the resulting file to your intended contact:
 
 ```sh
-go run ./cmd/shadowtalk invite create --ttl 24h > alice.invite
+shadowtalk invite create --ttl 24h > alice.invite
 ```
 
 In Windows PowerShell, write the token as ASCII to avoid an encoding marker:
 
 ```powershell
-go run ./cmd/shadowtalk invite create --ttl 24h | Set-Content -Encoding ascii alice.invite
+shadowtalk invite create --ttl 24h | Set-Content -Encoding ascii alice.invite
 ```
 
 The recipient inspects the invitation:
 
 ```sh
-go run ./cmd/shadowtalk invite inspect --file alice.invite
+shadowtalk invite inspect --file alice.invite
 ```
 
 **Compare the full fingerprint with the sender through a trusted channel.** A valid signature proves ownership of a key, not the identity of the person sending you the file. After checking, replace `SHA256:...` below with the full confirmed fingerprint:
 
 ```sh
-go run ./cmd/shadowtalk contacts add --alias alice --fingerprint SHA256:... --file alice.invite
-go run ./cmd/shadowtalk contacts list
-go run ./cmd/shadowtalk contacts show --alias alice
+shadowtalk contacts add --alias alice --fingerprint SHA256:... --file alice.invite
+shadowtalk contacts list
+shadowtalk contacts show --alias alice
 ```
 
 Each participant needs their own profile. Exchange invitations in both directions to prepare mutual trust. These commands only save local contacts; they do not contact the other person or open a chat.
@@ -150,7 +161,7 @@ Each participant needs their own profile. Exchange invitations in both direction
 Remove a local contact by confirming its stored fingerprint:
 
 ```sh
-go run ./cmd/shadowtalk contacts remove --alias alice --fingerprint SHA256:...
+shadowtalk contacts remove --alias alice --fingerprint SHA256:...
 ```
 
 This removes the local entry; it does not revoke invitations. For command details, use `--help`, `invite --help` or `contacts --help`.
@@ -160,13 +171,13 @@ This removes the local entry; it does not revoke invitations. For command detail
 After both participants have saved each other's confirmed invitations, install Tor separately and run:
 
 ```sh
-go run ./cmd/shadowtalk chat --contact alice
+shadowtalk chat --contact alice
 ```
 
 If Tor is not on PATH, specify its executable (including `tor.exe` on Windows):
 
 ```sh
-go run ./cmd/shadowtalk chat --tor-binary "/path/to/tor" --startup-timeout 5m
+shadowtalk chat --tor-binary "/path/to/tor" --startup-timeout 5m
 ```
 
 The screen shows Tor's bootstrap percentage and stage, then contacts, history and the message editor. The default Tor startup timeout is 3 minutes; `--startup-timeout` accepts 1 second to 15 minutes. History opens after Tor is ready. Omitting `--contact` selects the first saved contact. Contacts and invitations are managed using the commands above; restart chat to apply changes.
@@ -201,12 +212,12 @@ Message text is limited to 16384 UTF-8 bytes. Oversized pastes are rejected, and
 To use a different directory, put `--profile-dir` **before** the command:
 
 ```sh
-go run ./cmd/shadowtalk --profile-dir ./data/demo ui
+shadowtalk --profile-dir ./data/demo ui
 ```
 
 The private seed is encrypted in `identity-seed.json`; its encryption key stays in the OS credential store. ShadowTalk does not use a separate application password or fall back to storing that key in plaintext. Copying the profile directory alone is **not a portable backup** of the identity.
 
-`profile.json` and `contacts.json` contain unencrypted public metadata, including contact relationships. When used by the core API, `messages.db` encrypts message text with a profile-derived key; peers, IDs, directions, times, message lengths and delivery metadata remain visible. The chat command opens history and resumes the saved outgoing queue. A nickname or invitation signature does not replace fingerprint verification. This is an unfinished messenger, not a claim of security readiness; the [security notes](https://github.com/bacrehclb/ShadowTalk/blob/dev/docs/security.md) describe the mechanisms and their limits.
+`profile.json` and `contacts.json` contain unencrypted public metadata, including contact relationships. `messages.db` encrypts message text with a profile-derived key; peers, IDs, directions, times, message lengths and delivery metadata remain visible. The chat command opens history and resumes the saved outgoing queue. A nickname or invitation signature does not replace fingerprint verification. Read the [security notes](docs/security.md) for the implemented protections and their limits.
 
 ## Roadmap
 
@@ -223,13 +234,14 @@ The private seed is encrypted in `identity-seed.json`; its encryption key stays 
 - [x] Terminal chat screen
 - [x] Encrypted local history storage API
 - [x] Connect history to chat, acknowledgements and delivery retries
-- [ ] Release packaging for Windows, macOS and Linux
+- [x] Release packaging and dependency notices for Windows, macOS and Linux
+- [ ] Publish the first reviewed alpha release
 
 Group rooms and a possible GUI are future directions; their scope is not committed. The terminal client comes first.
 
 ## Project structure
 
-One Go module, one application binary. The current implementation lives in `dev`:
+One Go module, one application binary:
 
 ```text
 cmd/shadowtalk/          CLI commands and application entry point
@@ -248,27 +260,54 @@ internal/
   storage/              Profile files, contacts, OS keys and encrypted SQLite history
   tui/                  Profile screens, chat, bounded history and safe rendering
 docs/                   Architecture, protocol and design decisions
+packaging/              Installers, license collection and release staging
 tests/integration/      Tests across module and process boundaries
 ```
 
 ## Documentation
 
-These links point to the current documentation in `dev`. Technical documents are currently written in Russian.
+These links follow the checked-out branch or release tag. Most technical documents are in Russian; installation and release guides are in English.
 
 | Document | Contents |
 | --- | --- |
-| [Project overview](https://github.com/bacrehclb/ShadowTalk/blob/dev/docs/overview.md) | Goals and user scenarios |
-| [Architecture](https://github.com/bacrehclb/ShadowTalk/blob/dev/docs/architecture.md) | Module boundaries and dependencies |
-| [Protocol](https://github.com/bacrehclb/ShadowTalk/blob/dev/docs/protocol.md) | Invitations, text frames and acknowledgement format |
-| [Security](https://github.com/bacrehclb/ShadowTalk/blob/dev/docs/security.md) | Key storage, trust and limitations |
-| [Tor transport](https://github.com/bacrehclb/ShadowTalk/blob/dev/docs/tor.md) | Runtime setup, lifecycle and validation status |
-| [Design decisions](https://github.com/bacrehclb/ShadowTalk/tree/dev/docs/decisions) | Rationale behind the implementation |
+| [Project overview](docs/overview.md) | Goals and user scenarios |
+| [Architecture](docs/architecture.md) | Module boundaries and dependencies |
+| [Protocol](docs/protocol.md) | Invitations, text frames and acknowledgement format |
+| [Security](docs/security.md) | Key storage, trust and limitations |
+| [Tor transport](docs/tor.md) | Runtime setup, lifecycle and validation status |
+| [Design decisions](docs/decisions) | Rationale behind the implementation |
+| [Installation](docs/install.md) | Packages, runtime dependencies and first launch |
+| [Releases](docs/releases.md) | Build process, dependency notices and publication |
 
 <a id="разработка"></a>
 
 ## Development
 
-Run checks from the repository root on `dev`:
+Building from source requires **Go 1.26 or newer** and Git. Clone the repository:
+
+```sh
+git clone https://github.com/bacrehclb/ShadowTalk.git
+cd ShadowTalk
+```
+
+For an existing release, check out its tag. To work on the next version, run
+`git switch dev`, then create your feature branch.
+
+```sh
+# macOS / Linux
+go build -o ./bin/shadowtalk ./cmd/shadowtalk
+./bin/shadowtalk --version
+./bin/shadowtalk ui
+```
+
+```powershell
+# Windows PowerShell
+go build -o ./bin/shadowtalk.exe ./cmd/shadowtalk
+.\bin\shadowtalk.exe --version
+.\bin\shadowtalk.exe ui
+```
+
+Run checks from the repository root:
 
 ```sh
 go test ./...
@@ -303,20 +342,6 @@ In PowerShell, set the corresponding variables with `$env:NAME = 'value'` before
 
 </details>
 
-Build a local executable:
-
-```sh
-# macOS / Linux
-go build -o ./bin/shadowtalk ./cmd/shadowtalk
-./bin/shadowtalk ui
-```
-
-```powershell
-# Windows PowerShell
-go build -o ./bin/shadowtalk.exe ./cmd/shadowtalk
-.\bin\shadowtalk.exe ui
-```
-
 ## Contributing
 
 Bug reports, platform testing and focused improvements are welcome. For larger changes, open an [issue](https://github.com/bacrehclb/ShadowTalk/issues) first so we can agree on scope.
@@ -325,11 +350,14 @@ Bug reports, platform testing and focused improvements are welcome. For larger c
 2. Keep changes focused; update relevant tests and documentation.
 3. Run the checks above and open a pull request targeting `dev`.
 
-For bug reports, include your OS, Go version, commit and reproduction steps. Keep private keys, real invitation tokens and profile files out of issues and commits.
+For bug reports, include your OS, `shadowtalk --version` output and reproduction steps. For source builds, also include the commit and Go version. Keep private keys, real invitation tokens, bridge addresses, profile files and message contents out of issues and commits.
 
 ## License
 
 [MIT](LICENSE) · Copyright © 2026 1tuz.
+
+Distributed builds include `THIRD_PARTY_NOTICES.txt` with dependency and Go
+toolchain license texts. See [license locations](docs/install.md#licenses).
 
 ---
 

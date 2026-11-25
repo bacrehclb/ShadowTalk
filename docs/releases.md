@@ -181,6 +181,27 @@ Neither workflow establishes live messaging between separate computers.
 
 ## Publishing the first alpha
 
+### Prepare the main branch
+
+Development PRs target `dev`; the reviewed release candidate reaches `main`
+through a separate PR. A merge into `main` runs tests and snapshot packaging,
+but does not create a release. Only pushing an alpha tag starts the draft flow.
+
+If `main` contains changes absent from `dev`, merge `origin/main` into a
+preparation branch based on `dev` and resolve conflicts there. Preserve both
+parents when committing that merge. Merge its PR back into `dev` using
+**Create a merge commit**, so the shared history survives; squash/rebase would
+discard the merge parent. Then open the `dev` → `main` PR.
+
+Before merging the candidate, check that:
+
+- **Tests** and **Packages** pass for the current PR revision.
+- Both READMEs describe the current commands and link to documentation in the
+  same branch/tag; the installation guide matches the produced assets.
+- The release notes distinguish completed checks from deferred live-device
+  testing, and describe the actual signing status.
+- The dependency notice report is included in the packages and release bundle.
+
 The intended first tag is `v0.1.0-alpha.1`. Merging this implementation does not
 create a tag or a release. First review **Tests** and **Packages**, try the
 installation/user flow and merge the reviewed `dev` into `main` through a PR.
