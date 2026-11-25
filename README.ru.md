@@ -1,5 +1,7 @@
 <div align="center">
 
+  <img src="docs/assets/shadowtalk-logo.png" width="220" alt="Логотип ShadowTalk">
+
   <h1>ShadowTalk</h1>
 
   <p>
