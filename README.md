@@ -49,7 +49,7 @@ ShadowTalk is an open-source terminal messenger written in Go. Create a local id
 | Tor transport | Managed Tor process and stable v3 onion address |
 | History | Encrypted message text, duplicate detection and paginated history |
 | Delivery | Persistent outgoing queue, acknowledgement after saving, retries after restart and pending/delivered states |
-| Distribution | Portable archives, macOS PKG/DMG, Windows setup EXE and Linux DEB/RPM |
+| Distribution | macOS DMG, Windows setup EXE and Linux DEB/RPM installers |
 
 Live delivery and restart recovery were verified through the public Tor network using obfs4 with two nodes on one macOS arm64 computer. Separate-device exchange and live Windows/Linux networking remain unverified. See the [live test report](docs/testing/tor-live-exchange.md) for the exact scope.
 
@@ -65,9 +65,12 @@ on the intended commit. Read the version's limitations before installing.
 
 | Platform | Architectures | Downloads |
 | --- | --- | --- |
-| macOS | Apple Silicon (`arm64`), Intel (`amd64`) | `.dmg`, `.pkg`, `.tar.gz` |
-| Windows | x64 (`amd64`) | `_setup.exe`, `.zip` |
-| Linux | `arm64`, `amd64` | `.deb`, `.rpm`, `.tar.gz` |
+| macOS | Apple Silicon (`arm64`), Intel (`amd64`) | `.dmg` (contains the PKG installer) |
+| Windows | x64 (`amd64`) | `_setup.exe` |
+| Linux | `arm64`, `amd64` | `.deb`, `.rpm` |
+
+Download one installer for your OS and processor. Portable archives, standalone
+PKGs and maintainer files remain in the `shadowtalk-packages` CI artifact.
 
 Packages include a dependency notice file and are distributed with SHA-256
 checksums. Current builds are unsigned; macOS builds are not notarized.
