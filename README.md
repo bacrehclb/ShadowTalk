@@ -34,7 +34,7 @@ ShadowTalk is an open-source terminal messenger in development. The goal is simp
 
 > **Early development:** profiles, signed invitations and local contacts are available. The core supports live text exchange, encrypted history and persistent delivery retries. The terminal chat is available through `shadowtalk chat`.
 >
-> The features and commands below describe the **[dev branch](https://github.com/bacrehclb/ShadowTalk/tree/dev)**. `main` currently contains an earlier code snapshot; use `dev` to try the current implementation.
+> Active development happens on **[dev](https://github.com/bacrehclb/ShadowTalk/tree/dev)**. For a tagged build, use its release notes and bundled documentation; commands may change between alpha versions.
 
 ## What works today
 
@@ -61,9 +61,11 @@ The `chat` command connects the UI to the network and persistent delivery. Local
 
 The **Packages** workflow prepares development archives for Windows, macOS and
 Linux, macOS PKG/DMG installers, a Windows setup wizard, and Linux DEB/RPM packages.
-Download `shadowtalk-packages` from a successful workflow run; these are unsigned
-development snapshots, not a published alpha release. Go is not required to run
-them; Tor/Lyrebird and an OS credential store remain separate requirements.
+Published versions appear in [GitHub Releases](https://github.com/bacrehclb/ShadowTalk/releases).
+For development snapshots, download `shadowtalk-packages` from a successful
+**Packages** run. Alpha tags go through tests and packaging before producing an
+unpublished release draft for maintainer review. Current packages are unsigned.
+Go is not required to run them; Tor/Lyrebird and an OS credential store remain separate requirements.
 See [installation](docs/install.md) and [packaging/release status](docs/releases.md).
 
 ### Requirements

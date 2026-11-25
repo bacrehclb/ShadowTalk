@@ -1,9 +1,10 @@
 # Install a packaged build
 
-ShadowTalk is a terminal application. These instructions describe packages made
-by the **Packages** workflow; they do not announce a public release. Until a
-release is published, download the `shadowtalk-packages` artifact from a
-successful workflow run on the commit you intend to test.
+ShadowTalk is a terminal application. Published versions are available from
+[GitHub Releases](https://github.com/bacrehclb/ShadowTalk/releases); choose a
+version and read its alpha limitations. Until a release is published, or to
+test development code, download `shadowtalk-packages` from a successful workflow
+run on the intended commit. An unpublished release draft is not a public download.
 
 The artifact contains a `checksums.txt` SHA-256 manifest. On macOS use
 `shasum -a 256 -c checksums.txt`; on Linux use `sha256sum -c checksums.txt`.
@@ -49,9 +50,9 @@ macOS may block downloaded packages. Public distribution with publisher trust
 requires signing/notarization before packaging and checksum generation; this
 workflow does not disable Gatekeeper or remove quarantine attributes.
 
-GoReleaser also generates a Homebrew cask recipe. A public tap and a matching
-published release are not available yet, so `brew install shadowtalk` is not
-an advertised installation command. Snapshot casks are build output only.
+GoReleaser also generates a Homebrew cask recipe. A public tap is not available
+yet, so `brew install shadowtalk` is not an advertised installation command.
+Snapshot casks are build output only.
 
 To remove a PKG installation, remove `/usr/local/bin/shadowtalk` and
 `/usr/local/share/doc/shadowtalk`, then forget its receipt with

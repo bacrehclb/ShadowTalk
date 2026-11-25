@@ -11,8 +11,10 @@ dependency only; end users do not need it or Go.
 ```text
 .goreleaser.yaml                 binaries, archives, deb/rpm, cask, metadata
 .github/workflows/packages.yml   snapshot builds and native package smoke checks
+.github/workflows/release.yml    alpha tag checks, tests, packaging and draft release
 cmd/shadowtalk/version.go        --version and linker variables
 packaging/package.py             native installer orchestration and checksums
+packaging/release.py             source/bundle validation and local release staging
 packaging/macos/                 native Installer text and disk-image readme
 packaging/windows/               Inno Setup definition and native smoke check
 docs/install.md                 user installation and runtime requirements
@@ -116,8 +118,10 @@ python3 -m unittest discover -s packaging -p 'test_*.py'
 ## CI artifacts
 
 The **Packages** workflow runs for PRs targeting `dev`/`main`, pushes to those
-branches and manual dispatch. It has read-only repository permissions and uses
-snapshot mode. There is no tag-triggered publisher or automatic tap push.
+branches and manual dispatch. These runs use snapshot mode. It is also reusable:
+the **Alpha release** workflow calls it with `release: true` for an actual tagged
+version. Packaging jobs have read-only repository permissions; only the final
+draft creation job can write releases. There is no automatic tap push.
 
 1. Ubuntu builds five binaries and archives with GoReleaser and four Linux
    packages. It installs/removes the amd64 DEB and runs the installed command
@@ -140,29 +144,101 @@ Neither workflow establishes live messaging between separate computers.
 
 ## Publishing the first alpha
 
-The intended first tag is `v0.1.0-alpha.1`; **do not tag or publish this snapshot
-step**. Before publication:
+The intended first tag is `v0.1.0-alpha.1`. Merging this implementation does not
+create a tag or a release. First review **Tests** and **Packages**, try the
+installation/user flow and merge the reviewed `dev` into `main` through a PR.
+Keep [the alpha notes](releases/v0.1.0-alpha.1.md) aligned with the actual evidence.
+The separate-device Tor test is postponed, and the notes explicitly say so.
 
-- Review both workflow results and try the installation/user flow. Record the
-  postponed two-device test and other unverified platforms as alpha limitations.
-- Decide and configure publisher signing: Developer ID application/installer
-  certificates and Apple notarization for macOS, Authenticode for Windows.
-  The current pipeline builds unsigned packages and does not bypass OS checks.
-- Review third-party notices before distribution; Tor/Lyrebird are currently
-  separate dependencies and are not included in these packages.
-- Add a release job that assembles the **tagged** artifacts, signs/notarizes
-  them as applicable, computes final checksums and creates a reviewable GitHub
-  prerelease. Keep the actual publication under the maintainer's control.
-- Prepare a public `bacrehclb/homebrew-tap` repository if Homebrew distribution
-  is wanted. The recipe is currently generated with `skip_upload: true`; the
-  repo has not been created by this work. Publish the matching signed release
-  assets before the cask. Do not publish a snapshot cask with nonexistent URLs.
+The current pipeline creates **unsigned** packages. Before public distribution,
+choose whether to ship the experimental alpha with that limitation or configure
+Developer ID signing/notarization and Windows Authenticode in a separate step.
+Do not describe these builds as signed. Review third-party notices as well;
+Tor/Lyrebird remain separate dependencies.
 
-After that setup, the intended macOS command is
-`brew install --cask bacrehclb/tap/shadowtalk`. It is not usable yet. The PKG can
-already be installed through Apple's `installer` command after downloading a
-build artifact. Linux DEB/RPM files install locally through `apt`/`dnf` without
-operating an APT/YUM repository. See [installation instructions](install.md).
+### Create the draft after the main merge
+
+Only when the selected `main` commit is ready for release:
+
+```sh
+git switch main
+git pull --ff-only origin main
+git tag -a v0.1.0-alpha.1 -m "ShadowTalk v0.1.0-alpha.1"
+git push origin v0.1.0-alpha.1
+```
+
+Pushing that tag starts **Alpha release**:
+
+1. Require a strict `vMAJOR.MINOR.PATCH-alpha.N` tag (`N >= 1`), a clean checkout
+   at its exact commit, ancestry in `origin/main`, and notes at
+   `docs/releases/TAG.md`. A tag on an unmerged feature branch is rejected.
+2. Run the existing Go tests, vet and build on all three operating systems.
+3. Reuse **Packages** without `--snapshot`. Native installer checks still run.
+4. Verify the bundle's tag/commit metadata, exact file inventory and every
+   SHA-256 checksum. Flatten the cask path and regenerate the final manifest.
+5. Use `gh release create --verify-tag --draft --prerelease --latest=false` to
+   create an **unpublished** release. Publication is the maintainer's final
+   manual action in GitHub Releases.
+
+The draft includes five portable archives, four DEB/RPM packages, four macOS
+PKG/DMG files, one Windows setup EXE, `metadata.json`, the generated
+`shadowtalk.rb` recipe and `checksums.txt`. Notes identify the source commit.
+Only artifacts from this workflow run are used. Source archives automatically
+provided by GitHub are separate from our checksummed release assets.
+
+There is deliberately no automatic overwrite of existing releases. A rerun
+stops if that tag already has a draft or a published release. If an upload
+failed halfway, inspect and remove only the incomplete **draft** through GitHub
+before rerunning the failed job. Never delete/rewrite a published release to
+retry a build; use a new version. Build failures before draft creation can be
+retried with GitHub's **Re-run failed jobs**.
+
+### Add the locally designed DMG before publication
+
+The automated draft contains standard DMGs. On a Mac, use the **same tag's**
+checkout and its successful **Alpha release** run ID, not a development snapshot.
+Start with new, empty paths under ignored `dist/`:
+
+```sh
+git switch --detach v0.1.0-alpha.1
+gh run download RUN_ID --name shadowtalk-packages --dir dist/alpha-input
+python3 packaging/package.py macos --dist dist/alpha-input \
+  --dmg-template ../ShadowTalk-design/dmg/ShadowTalk.dmgcanvas
+
+# Replace all four matching macOS files, including the PKGs inside the DMGs.
+mv dist/alpha-input/installers/* dist/alpha-input/
+rmdir dist/alpha-input/installers
+python3 packaging/package.py checksums --dist dist/alpha-input
+python3 packaging/release.py prepare --tag v0.1.0-alpha.1 \
+  --commit "$(git rev-parse HEAD)" \
+  --bundle dist/alpha-input --output dist/alpha-custom
+```
+
+Use `--dmgcanvas PATH` if needed. Preview each DMG and verify that its embedded
+PKG matches the accompanying architecture-specific PKG. Finish any signing and
+notarization before recalculating sums; modifying a PKG requires repackaging its
+DMG too. The helper does not sign files. Trial Canvas builds retain the watermark.
+
+While the GitHub release is still a **draft**, replace its four macOS assets and
+`checksums.txt` with the matching files in `dist/alpha-custom/assets/`. Other
+assets must remain identical to the downloaded bundle. Download the draft's
+final assets and verify the manifest before publishing. After signing, update
+the unsigned-build wording in the draft notes to describe exactly what was signed.
+Do not use this replacement procedure on a published release.
+
+`prepare` is local-only: it neither uploads nor publishes. It refuses snapshots,
+mixed versions/commits, missing or unexpected files, broken checksums and reused
+output directories. A checksum proves correspondence to the supplied manifest;
+it does not establish who built or signed a file.
+
+### Homebrew and Linux
+
+The cask is generated with `skip_upload: true`. A public
+`bacrehclb/homebrew-tap` repository is a later distribution step; it has not been
+created here. Publish matching release assets before the cask. The intended
+`brew install --cask bacrehclb/tap/shadowtalk` command is not usable yet.
+Linux DEB/RPM packages install locally through `apt`/`dnf` without an APT/YUM
+repository. See [installation instructions](install.md).
 
 ## Tool references
 
@@ -172,3 +248,6 @@ operating an APT/YUM repository. See [installation instructions](install.md).
 - [Inno Setup](https://jrsoftware.org/inno-setup),
   [Windows runner tools](https://github.com/actions/runner-images/blob/main/images/windows/Windows2025-Readme.md)
 - [Apple notarization workflow](https://developer.apple.com/documentation/security/customizing-the-notarization-workflow)
+- [Reusable GitHub workflows](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows),
+  [GitHub CLI draft releases](https://cli.github.com/manual/gh_release_create),
+  [GoReleaser build without publication](https://goreleaser.com/getting-started/quick-start/)
