@@ -4,6 +4,7 @@
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import platform
 import re
@@ -15,6 +16,7 @@ import tempfile
 import zipfile
 
 ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_DMGCANVAS = Path("/Applications/DMG Canvas.app/Contents/Resources/dmgcanvas")
 
 
 def run(*args):
@@ -33,7 +35,34 @@ def unpack(archive, destination):
             bundle.extractall(destination, filter="data")
 
 
-def macos(dist, version):
+def canvas_template(path):
+    """Validate the two replaceable payloads before invoking any build tools."""
+    path = path.expanduser().resolve()
+    try:
+        document = json.loads((path / "Disk Image").read_text(encoding="utf-8"))
+        entries = document["diskImage"]["windowContents"]
+        names = [Path(entry["filePath"]).name for entry in entries if not entry.get("isAnAlias")]
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as error:
+        raise ValueError("expected a DMG Canvas 4 project containing a readable Disk Image document") from error
+    if document.get("version") != 4 or len(entries) != 2 or sorted(names) != ["Install ShadowTalk.pkg", "Quick Start.txt"]:
+        raise ValueError("Canvas project must contain exactly Install ShadowTalk.pkg and Quick Start.txt (not aliases)")
+    return path
+
+
+def build_dmg(image, output, template, dmgcanvas):
+    if template is None:
+        run("hdiutil", "create", "-volname", "ShadowTalk", "-srcfolder", image,
+            "-format", "UDZO", "-ov", output)
+        return
+    # Replace preview inputs for EACH architecture. The external project stays
+    # untouched, and a locally saved signing configuration cannot upload files.
+    run(dmgcanvas, template, output, "-volumeName", "ShadowTalk",
+        "-setFilePath", "Install ShadowTalk.pkg", image / "Install ShadowTalk.pkg",
+        "-setFilePath", "Quick Start.txt", image / "Quick Start.txt",
+        "-skipSigningAndNotarization")
+
+
+def macos(dist, version, template=None, dmgcanvas=DEFAULT_DMGCANVAS):
     if sys.platform != "darwin":
         raise RuntimeError("macOS installers require a macOS host")
     output = dist / "installers"
@@ -79,9 +108,8 @@ def macos(dist, version):
             image = work / "image"
             image.mkdir()
             shutil.copy2(pkg, image / "Install ShadowTalk.pkg")
-            shutil.copy2(ROOT / "packaging/macos/Read Me.txt", image)
-            run("hdiutil", "create", "-volname", "ShadowTalk", "-srcfolder", image,
-                "-format", "UDZO", "-ov", output / f"{name}.dmg")
+            shutil.copy2(ROOT / "packaging/macos/Read Me.txt", image / "Quick Start.txt")
+            build_dmg(image, output / f"{name}.dmg", template, dmgcanvas)
 
 
 def windows(dist, version, iscc):
@@ -153,7 +181,21 @@ def main():
     parser.add_argument("command", choices=("macos", "windows", "checksums", "verify"))
     parser.add_argument("--dist", type=Path, default=ROOT / "dist")
     parser.add_argument("--iscc", default="ISCC.exe")
+    parser.add_argument("--dmg-template", type=Path, help="external DMG Canvas 4 project (macos only)")
+    parser.add_argument("--dmgcanvas", type=Path, help="dmgcanvas executable; requires --dmg-template")
     args = parser.parse_args()
+    template = None
+    dmgcanvas = DEFAULT_DMGCANVAS
+    if args.dmg_template is not None or args.dmgcanvas is not None:
+        if args.command != "macos" or args.dmg_template is None:
+            parser.error("--dmg-template and --dmgcanvas apply only to macos; --dmgcanvas requires --dmg-template")
+        try:
+            template = canvas_template(args.dmg_template)
+        except ValueError as error:
+            parser.error(str(error))
+        dmgcanvas = (args.dmgcanvas or DEFAULT_DMGCANVAS).expanduser().resolve()
+        if not dmgcanvas.is_file() or not os.access(dmgcanvas, os.X_OK):
+            parser.error("dmgcanvas executable not found or not executable; use --dmgcanvas PATH")
     dist = args.dist.resolve()
     if args.command == "checksums":
         checksums(dist)
@@ -165,7 +207,7 @@ def main():
     if not re.fullmatch(r"\d+\.\d+\.\d+(?:[-+][a-zA-Z0-9.-]+)?", version):
         raise ValueError("unexpected GoReleaser version")
     if args.command == "macos":
-        macos(dist, version)
+        macos(dist, version, template, dmgcanvas)
     else:
         windows(dist, version, args.iscc)
 
