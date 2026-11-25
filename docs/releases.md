@@ -14,6 +14,8 @@ dependency only; end users do not need it or Go.
 .github/workflows/release.yml    alpha tag checks, tests, packaging and draft release
 cmd/shadowtalk/version.go        --version and linker variables
 packaging/package.py             native installer orchestration and checksums
+packaging/notices.py             runtime dependency license collection
+packaging/licenses/              reviewed supplemental upstream license texts
 packaging/release.py             source/bundle validation and local release staging
 packaging/macos/                 native Installer text and disk-image readme
 packaging/windows/               Inno Setup definition and native smoke check
@@ -41,6 +43,7 @@ From the repository root:
 ```sh
 goreleaser check
 goreleaser release --snapshot --clean --skip=publish
+cp bin/notices/THIRD_PARTY_NOTICES.txt dist/THIRD_PARTY_NOTICES.txt
 python3 packaging/package.py verify
 
 # On macOS: build both Intel and Apple Silicon PKG/DMG files.
@@ -50,10 +53,11 @@ python3 packaging/package.py macos
 On Windows, after the GoReleaser build:
 
 ```powershell
+Copy-Item bin/notices/THIRD_PARTY_NOTICES.txt dist/THIRD_PARTY_NOTICES.txt
 python packaging/package.py windows --iscc "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
 ```
 
-These commands write only build artifacts under `dist/` and temporary staging
+These commands write only build artifacts under `bin/`, `dist/` and temporary staging
 directories. They do not run the resulting installers. The macOS PKG receipt
 uses the numeric SemVer core because Apple's package metadata has a different
 version format; the filename and executable retain the full snapshot/alpha
@@ -64,6 +68,39 @@ installers or signing files, collect the final files into a clean directory and
 run `python3 packaging/package.py checksums --dist PATH` to create the final
 recursive SHA-256 manifest. Do not distribute the earlier checksum list as if
 it covered installers.
+
+## Third-party notices
+
+GoReleaser's `before` hook generates `bin/notices/THIRD_PARTY_NOTICES.txt` from the
+runtime package graph for all five release targets, with CGO disabled. It uses
+`go list -mod=readonly -deps` without tests. The report includes module versions,
+original license/patent texts, nested notices on imported package paths, the
+build's Go toolchain notices, and the reviewed Unicode supplement in
+[`packaging/licenses`](../packaging/licenses/README.md). It does not modify
+`go.mod` or `go.sum`. Modules must be available in the Go module cache or
+downloadable through the normal Go module mechanism.
+
+The intermediate report lives outside `dist/` because GoReleaser checks that
+directory is empty after running global before hooks. Archives, Linux packages
+and GoReleaser's checksum read it from `bin/notices/`; the next CI step copies it
+to `dist/` as a standalone asset. The local commands above perform the same copy.
+
+The same report ships in every portable archive, native installation and as a
+separate release asset. Upstream third-party notice documents are preserved
+verbatim, including any text about components that our binary does not use.
+Tor and Lyrebird are separate downloads and are not included in this inventory.
+ShadowTalk's own MIT license remains in `LICENSE`.
+
+Missing/empty license texts and replaced modules stop generation for review.
+Archive verification compares the included report with the generated one;
+native CI installation checks compare installed bytes as well. Release staging
+requires the report and its checksum. Build outputs stay in ignored `bin/` and `dist/`.
+
+When updating dependencies or Go, review the generated report and any inline
+notices in newly imported/generated code. Filename discovery cannot establish
+license coverage for arbitrary dependencies. Keep `TARGETS` in `package.py`
+aligned with GoReleaser, and update collection if build tags or CGO settings
+change. Changes to supplemental texts and exclusions require source review.
 
 ## Custom macOS disk image (optional)
 
@@ -153,8 +190,8 @@ The separate-device Tor test is postponed, and the notes explicitly say so.
 The current pipeline creates **unsigned** packages. Before public distribution,
 choose whether to ship the experimental alpha with that limitation or configure
 Developer ID signing/notarization and Windows Authenticode in a separate step.
-Do not describe these builds as signed. Review third-party notices as well;
-Tor/Lyrebird remain separate dependencies.
+Do not describe these builds as signed. Review the generated third-party notice
+report for the selected release; Tor/Lyrebird remain separate dependencies.
 
 ### Create the draft after the main merge
 
@@ -182,7 +219,8 @@ Pushing that tag starts **Alpha release**:
 
 The draft includes five portable archives, four DEB/RPM packages, four macOS
 PKG/DMG files, one Windows setup EXE, `metadata.json`, the generated
-`shadowtalk.rb` recipe and `checksums.txt`. Notes identify the source commit.
+`shadowtalk.rb` recipe, `THIRD_PARTY_NOTICES.txt` and `checksums.txt`.
+Notes identify the source commit.
 Only artifacts from this workflow run are used. Source archives automatically
 provided by GitHub are separate from our checksummed release assets.
 

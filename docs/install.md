@@ -120,3 +120,16 @@ directions. Follow the [English README](../README.md#usage) or
 Package installation does not validate live messaging. The current live test
 covered two independent nodes on one Mac; two-device and live Windows/Linux
 checks remain outstanding. See [the test report](testing/tor-live-exchange.md).
+
+## Licenses
+
+`LICENSE` contains ShadowTalk's MIT license. `THIRD_PARTY_NOTICES.txt` contains
+the bundled Go dependency/toolchain notices and is also a separate release
+download. Find both files in the extracted portable archive, or after installing:
+
+- macOS PKG/DMG: `/usr/local/share/doc/shadowtalk/`.
+- Windows setup: the installation directory, normally
+  `%LOCALAPPDATA%\Programs\ShadowTalk\`.
+- Linux DEB/RPM: `/usr/share/doc/shadowtalk/`.
+
+Tor and Lyrebird are installed separately and provide their own license texts.

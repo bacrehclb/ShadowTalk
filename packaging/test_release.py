@@ -42,6 +42,7 @@ class ReleaseBundleTests(unittest.TestCase):
         cask = self.bundle / "homebrew/Casks/shadowtalk.rb"
         cask.parent.mkdir(parents=True)
         cask.write_text("fixture cask", encoding="utf-8")
+        (self.bundle / "THIRD_PARTY_NOTICES.txt").write_text("fixture notices", encoding="utf-8")
         package.checksums(self.bundle)
 
     def prepare(self):
@@ -54,7 +55,7 @@ class ReleaseBundleTests(unittest.TestCase):
         ], capture_output=True, text=True, encoding="utf-8", timeout=10)
         self.assertEqual(result.returncode, 0, result.stderr)
         assets = self.output / "assets"
-        self.assertEqual(len(list(assets.iterdir())), 17)
+        self.assertEqual(len(list(assets.iterdir())), 18)
         names = set()
         for line in (assets / "checksums.txt").read_text().splitlines():
             checksum, name = line.split("  ")
@@ -65,6 +66,15 @@ class ReleaseBundleTests(unittest.TestCase):
         self.assertIn(COMMIT, (self.output / "release-notes.md").read_text())
         self.assertEqual((assets / "shadowtalk.rb").read_bytes(),
                          (self.bundle / "homebrew/Casks/shadowtalk.rb").read_bytes())
+        self.assertEqual((assets / "THIRD_PARTY_NOTICES.txt").read_bytes(),
+                         (self.bundle / "THIRD_PARTY_NOTICES.txt").read_bytes())
+
+    def test_rejects_bundle_without_third_party_notices(self):
+        (self.bundle / "THIRD_PARTY_NOTICES.txt").unlink()
+        package.checksums(self.bundle)
+        with self.assertRaisesRegex(ValueError, "missing=.*THIRD_PARTY_NOTICES"):
+            self.prepare()
+        self.assertFalse(self.output.exists())
 
     def test_rejects_snapshot_wrong_tag_or_commit_before_creating_output(self):
         original = self.metadata.read_text()
