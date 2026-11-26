@@ -91,7 +91,12 @@ def macos(dist, version, template=None, dmgcanvas=DEFAULT_DMGCANVAS):
             numeric_version = re.match(r"\d+\.\d+\.\d+", version).group()
             run("pkgbuild", "--root", payload, "--identifier", "io.github.bacrehclb.shadowtalk",
                 "--version", numeric_version, "--install-location", "/", component)
-            resources = ROOT / "packaging/macos"
+            # Productbuild copies this directory. Keep app-launcher source and
+            # artwork out of the PKG's installer resources.
+            resources = work / "installer-resources"
+            resources.mkdir()
+            for filename in ("welcome.html", "conclusion.html"):
+                shutil.copy2(ROOT / "packaging/macos" / filename, resources / filename)
             distribution = work / "distribution.xml"
             distribution.write_text(f'''<?xml version="1.0" encoding="utf-8"?>
 <installer-gui-script minSpecVersion="2">

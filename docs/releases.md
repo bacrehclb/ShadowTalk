@@ -18,6 +18,7 @@ packaging/notices.py             runtime dependency license collection
 packaging/licenses/              reviewed supplemental upstream license texts
 packaging/release.py             source/bundle validation and local release staging
 packaging/macos/                 native Installer text and disk-image readme
+packaging/macos_app.py           optional universal app that opens Terminal
 packaging/windows/               Inno Setup definition and native smoke check
 docs/install.md                 user installation and runtime requirements
 ```
@@ -103,6 +104,10 @@ aligned with GoReleaser, and update collection if build tags or CGO settings
 change. Changes to supplemental texts and exclusions require source review.
 
 ## Custom macOS disk image (optional)
+
+For a drag-to-Applications image, build the separate
+[Terminal launcher app](macos-app.md) and arrange it manually in DMG Canvas.
+The automated Canvas integration described below continues to use PKG inputs.
 
 The standard build above uses `hdiutil` and requires no DMG Canvas license.
 For a custom background, volume icon and layout, keep the editable

@@ -84,7 +84,12 @@ checksums. Current builds are unsigned; macOS builds are not notarized.
 Go is only needed to [build from source](#development).
 
 **macOS:** open the DMG, run `Install ShadowTalk.pkg`, finish the installer, then
-open Terminal. ShadowTalk installs a terminal command; there is no desktop app to open.
+open Terminal. The PKG installs the `shadowtalk` terminal command.
+
+For a Finder icon that opens the terminal interface, you can also
+[build ShadowTalk.app](docs/macos-app.md). Its menu offers profiles, chat and a
+command prompt. This optional app can be dragged into Applications; it is not
+yet part of the automated release downloads.
 
 **Windows:** run the setup EXE, keep the PATH option enabled, then open a **new**
 PowerShell or Windows Terminal window after installation.
