@@ -72,7 +72,7 @@ on the intended commit. Read the version's limitations before installing.
 
 | Platform | Architectures | Downloads |
 | --- | --- | --- |
-| macOS | Apple Silicon (`arm64`), Intel (`amd64`) | `.dmg` (contains the PKG installer) |
+| macOS 12+ | Apple Silicon and Intel, in one app | `_darwin_universal.dmg` (contains `ShadowTalk.app`) |
 | Windows | x64 (`amd64`) | `_setup.exe` |
 | Linux | `arm64`, `amd64` | `.deb`, `.rpm` |
 
@@ -80,16 +80,17 @@ Download one installer for your OS and processor. Portable archives, standalone
 PKGs and maintainer files remain in the `shadowtalk-packages` CI artifact.
 
 Packages include a dependency notice file and are distributed with SHA-256
-checksums. Current builds are unsigned; macOS builds are not notarized.
+checksums. Builds have no verified publisher signature; the macOS app has an
+ad-hoc signature and is not notarized.
 Go is only needed to [build from source](#development).
 
-**macOS:** open the DMG, run `Install ShadowTalk.pkg`, finish the installer, then
-open Terminal. The PKG installs the `shadowtalk` terminal command.
-
-For a Finder icon that opens the terminal interface, you can also
-[build ShadowTalk.app](docs/macos-app.md). Its menu offers profiles, chat and a
-command prompt. This optional app can be dragged into Applications; it is not
-yet part of the automated release downloads.
+**macOS:** open the universal DMG, drag **ShadowTalk.app → Applications**, then
+open the copied app. Terminal opens with a menu: **1 — Профиль** (profile),
+**2 — Чат** (chat), **3 — Команды** (commands), **0 — Выход** (exit).
+Use **3** for the `shadowtalk ...` commands below; this command is available in
+the app's prompt without changing your system PATH. The app opens a terminal
+interface. Build instructions are in the [macOS app guide](docs/macos-app.md).
+The CI artifact still contains the alternative PKG installer and portable archives.
 
 **Windows:** run the setup EXE, keep the PATH option enabled, then open a **new**
 PowerShell or Windows Terminal window after installation.
@@ -116,14 +117,17 @@ Run `shadowtalk --version` to check the installation. See the
 
 ### 2. Create your profile
 
-After installation, open a terminal and run:
+On macOS, open ShadowTalk.app and choose **3 — Команды**. On Windows/Linux,
+open a terminal after installation. Then run:
 
 ```sh
 shadowtalk --version
 shadowtalk ui
 ```
 
-The examples below use `shadowtalk` on PATH. For a portable archive, use
+The examples below use `shadowtalk` in the app's command prompt or on PATH.
+You can also choose **1 — Профиль** in the app menu to open the profile TUI directly.
+For a portable archive, use
 `./shadowtalk` on macOS/Linux or `.\shadowtalk.exe` in PowerShell from the
 extracted directory. For a source build, use the binary path shown under
 [Development](#development). Profile and contact commands work without Tor.
@@ -385,7 +389,7 @@ saved history and queued messages use the same profile. Times in chat are UTC.
 
 | Symptom | What to check |
 | --- | --- |
-| `shadowtalk` is not found | Open a new terminal after installation. On Windows, enable the installer's PATH option; for a portable build, use the executable's full path. |
+| `shadowtalk` is not found | For the macOS app, use **3 — Команды** in its menu. On Windows, enable the installer's PATH option and open a new terminal; for a portable build, use the executable's full path. |
 | `ui` shows a profile but no conversation | Exit with Esc and run `shadowtalk chat`; invitations and contacts are managed with the commands in step 4. |
 | Tor or Lyrebird is not found | Point `tor_binary` / `lyrebird_binary` to the executable, not its folder. On Windows include `.exe`; keep Expert Bundle libraries in place. |
 | Tor startup times out | Check connectivity, update obfs4 bridges if needed, and retry. You can use `--startup-timeout 10m`; the allowed maximum is `15m`. |

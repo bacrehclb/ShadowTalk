@@ -188,28 +188,22 @@ Neither workflow establishes live messaging between separate computers.
 
 ### Prepare the main branch
 
-Development PRs target `dev`; the reviewed release candidate reaches `main`
-through a separate PR. A merge into `main` runs tests and snapshot packaging,
-but does not create a release. Only pushing an alpha tag starts the draft flow.
+Current maintenance is directly on `main`. A normal push runs tests and snapshot
+packaging, but does not create a release. A commit message containing `[skip ci]`
+skips those push workflows; this is not evidence that checks passed. Only pushing
+a new alpha tag starts the draft flow. The first tag `v0.1.0-alpha.1` already
+exists and must not be moved for documentation or wrapper updates.
 
-If `main` contains changes absent from `dev`, merge `origin/main` into a
-preparation branch based on `dev` and resolve conflicts there. Preserve both
-parents when committing that merge. Merge its PR back into `dev` using
-**Create a merge commit**, so the shared history survives; squash/rebase would
-discard the merge parent. Then open the `dev` → `main` PR.
+Before tagging a future candidate, check that:
 
-Before merging the candidate, check that:
-
-- **Tests** and **Packages** pass for the current PR revision.
+- **Tests** and **Packages** pass for that source revision, or document the exact
+  local checks and outstanding platform checks when CI was deliberately skipped.
 - Both READMEs describe the current commands and link to documentation in the
   same branch/tag; the installation guide matches the produced assets.
 - The release notes distinguish completed checks from deferred live-device
   testing, and describe the actual signing status.
 - The dependency notice report is included in the packages and release bundle.
 
-The intended first tag is `v0.1.0-alpha.1`. Merging this implementation does not
-create a tag or a release. First review **Tests** and **Packages**, try the
-installation/user flow and merge the reviewed `dev` into `main` through a PR.
 Keep [the alpha notes](releases/v0.1.0-alpha.1.md) aligned with the actual evidence.
 The separate-device Tor test is postponed, and the notes explicitly say so.
 
@@ -221,7 +215,9 @@ report for the selected release; Tor/Lyrebird remain separate dependencies.
 
 ### Create the draft after the main merge
 
-Only when the selected `main` commit is ready for release:
+The original first-alpha draft was created with the commands below. Its tag and
+draft now exist: **do not rerun them for `v0.1.0-alpha.1`**. For a future release,
+select a new version and corresponding release-notes file first.
 
 ```sh
 git switch main
@@ -244,16 +240,18 @@ Pushing that tag starts **Alpha release**:
    create an **unpublished** release. Publication is the maintainer's final
    manual action in GitHub Releases.
 
-The draft has **nine uploaded assets**: two macOS DMGs, one Windows setup EXE,
+The automated draft starts with **nine uploaded assets**: two macOS DMGs, one Windows setup EXE,
 four Linux DEB/RPM packages, `THIRD_PARTY_NOTICES.txt` and `checksums.txt`.
 Each DMG contains its PKG installer. Five portable archives, standalone PKGs,
 `metadata.json` and the generated cask stay in the complete `shadowtalk-packages`
 CI artifact for verification and local repackaging. That artifact retains its
 own complete checksum manifest; the public manifest covers only public files.
 Notes identify the source commit, so metadata need not be a user download.
-Only artifacts from this workflow run are used. The two source archives
+This automated step uses only artifacts from that workflow run. The final
+first-alpha draft instead uses the separately verified universal app DMG below,
+leaving **eight assets**. The two source archives
 [automatically provided by GitHub](https://docs.github.com/en/repositories/releasing-projects-on-github/about-releases)
-are separate from these nine uploaded assets and their checksum manifest.
+are separate from uploaded assets and their checksum manifest.
 
 There is deliberately no automatic overwrite of existing releases. A rerun
 stops if that tag already has a draft or a published release. If an upload
@@ -262,7 +260,42 @@ before rerunning the failed job. Never delete/rewrite a published release to
 retry a build; use a new version. Build failures before draft creation can be
 retried with GitHub's **Re-run failed jobs**.
 
-### Add the locally designed DMG before publication
+### First alpha: use the universal app DMG
+
+The maintainer's custom DMG contains a universal `ShadowTalk.app` and an
+Applications link. Build the app with `macos_app.py --bundle` as described in
+[the app guide](macos-app.md). A source build reporting `dev` is not the alpha
+payload; check the version inside the final image before uploading it.
+
+After verifying the final DMG, prepare a separate set of public downloads:
+
+```sh
+python3 packaging/release.py prepare --tag v0.1.0-alpha.1 \
+  --commit "$(git rev-parse 'v0.1.0-alpha.1^{commit}')" \
+  --bundle dist/alpha-input --output dist/alpha-universal
+cp /path/to/final.dmg dist/alpha-universal/assets/shadowtalk_0.1.0-alpha.1_darwin_universal.dmg
+rm dist/alpha-universal/assets/shadowtalk_0.1.0-alpha.1_darwin_arm64.dmg \
+   dist/alpha-universal/assets/shadowtalk_0.1.0-alpha.1_darwin_amd64.dmg
+python3 packaging/package.py checksums --dist dist/alpha-universal/assets
+```
+
+The source CI bundle stays intact. The final public manifest covers seven files:
+one universal DMG, the Windows EXE, four Linux packages and dependency notices.
+Together with `checksums.txt`, this is eight uploaded assets. Windows/Linux
+files and notices must remain byte-identical to the verified CI bundle.
+
+While the release is unpublished, upload and verify the universal DMG, replace
+the manifest, remove the two older DMGs and update the notes to explain app
+installation. Keep backups until final verification. Verify the draft's exact
+file list and SHA-256 digests after changes, and preserve `draft=true`,
+`prerelease=true` and the existing tag. Publication is a separate manual action.
+
+The first-alpha image was checked for the correct alpha payload, both CPU slices,
+ad-hoc signatures, and preservation of the custom background/Finder layout.
+The maintainer reported successful copying to Applications and opening the menu.
+This does not replace the deferred two-device and live Windows/Linux tests.
+
+### Alternative: customized PKG-based DMGs
 
 The automated draft contains standard DMGs. On a Mac, use the **same tag's**
 checkout and its successful **Alpha release** run ID, not a development snapshot.

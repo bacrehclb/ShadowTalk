@@ -6,16 +6,19 @@ version and read its alpha limitations. Until a release is published, or to
 test development code, download `shadowtalk-packages` from a successful workflow
 run on the intended commit. An unpublished release draft is not a public download.
 
-A public release contains seven installers: two macOS DMGs, one Windows setup
-EXE and four Linux DEB/RPM packages, plus checksums and dependency notices.
+The prepared `v0.1.0-alpha.1` release contains six platform downloads: one universal
+macOS DMG, one Windows setup EXE and four Linux DEB/RPM packages, plus checksums
+and dependency notices (eight uploaded files in total).
 Download one installer for your platform. Portable archives and standalone PKGs
 are available in the full `shadowtalk-packages` CI artifact, not as release assets.
 GitHub's **Source code** ZIP/tarball downloads are the repository sources.
 
-The artifact contains a `checksums.txt` SHA-256 manifest. On macOS use
-`shasum -a 256 -c checksums.txt`; on Linux use `sha256sum -c checksums.txt`.
-On Windows, compare `Get-FileHash .\FILE -Algorithm SHA256` with its manifest
-entry. A checksum detects changes to a file; it is not a publisher signature.
+Download `checksums.txt` from the same release. For a single downloaded file,
+compare `shasum -a 256 FILE` on macOS, `sha256sum FILE` on Linux, or
+`Get-FileHash .\FILE -Algorithm SHA256` in PowerShell with the matching manifest
+entry. `-c checksums.txt` checks every listed file and reports missing downloads
+if you only downloaded one installer. A checksum detects changes to a file;
+it is not a publisher signature.
 
 ## Requirements
 
@@ -28,37 +31,47 @@ entry. A checksum detects changes to a file; it is not a publisher signature.
 - A real terminal, at least 60 columns × 20 rows for chat.
 
 Current targets: macOS and Linux `arm64`/`amd64`, Windows `amd64` (x64).
+The macOS app launcher requires macOS 12+ and includes both architectures.
 Native Windows ARM64, 32-bit systems and specific older OS versions have not
 been qualified. Cross-compilation does not establish runtime compatibility.
 
 ## macOS: DMG or terminal
 
-Choose `darwin_arm64` for Apple Silicon or `darwin_amd64` for Intel.
+Download **`shadowtalk_0.1.0-alpha.1_darwin_universal.dmg`** for either Apple
+Silicon or Intel. Open it, drag **ShadowTalk.app** onto **Applications**, then
+launch the copied app. Eject the disk image once copying finishes.
 
-**Graphical installation:** open the `.dmg`, then `Install ShadowTalk.pkg`.
-The native Installer puts the command in `/usr/local/bin/shadowtalk` and
-documentation in `/usr/local/share/doc/shadowtalk`. It requires administrator
-access and does not create a desktop `.app` or modify shell configuration.
+The app opens Terminal with a Russian menu: **1 — Профиль** (profile),
+**2 — Чат** (chat), **3 — Команды** (commands), **0 — Выход** (exit).
+Choose **1** to create/open your profile, **3** to exchange invitations and add
+contacts, and **2** to chat after configuring Tor. In the command prompt,
+`exit` or Ctrl+D returns to the menu.
 
-**Terminal installation:** download the matching `.dmg`, verify its checksum,
-then substitute its exact filename:
+The app does not install a command in the system PATH. Inside its **Команды**
+prompt, use `shadowtalk --version` and all README examples normally. From another
+terminal, use the bundled executable's full path:
 
 ```sh
-hdiutil attach ./shadowtalk_VERSION_darwin_ARCH.dmg
-sudo installer -pkg "/Volumes/ShadowTalk/Install ShadowTalk.pkg" -target /
-hdiutil detach "/Volumes/ShadowTalk"
-shadowtalk --version
+"/Applications/ShadowTalk.app/Contents/MacOS/shadowtalk" --version
+"/Applications/ShadowTalk.app/Contents/MacOS/shadowtalk" chat
 ```
 
-Use the volume path reported by `hdiutil` if it differs. The CI artifact also
-contains a standalone PKG and a portable `.tar.gz`; the latter can be unpacked
-and run with `./shadowtalk --version`. Install only one copy into a given command
-location.
+If you installed the app elsewhere, substitute that location. Profiles,
+credentials and Tor settings use the same locations as the standalone CLI.
+To remove the app, move that copy of `ShadowTalk.app` to the Trash; profile and
+Keychain data remain intact. See [the app guide](macos-app.md) for local builds.
 
-The current development builds are **not Developer ID signed or notarized**.
-macOS may block downloaded packages. Public distribution with publisher trust
-requires signing/notarization before packaging and checksum generation; this
-workflow does not disable Gatekeeper or remove quarantine attributes.
+The app has an **ad-hoc code signature**, but no Developer ID signature or Apple
+notarization. macOS may block downloaded copies. Local signature verification
+does not establish a verified publisher; this workflow does not disable
+Gatekeeper or remove quarantine attributes.
+
+**Alternative CLI installation:** the complete CI artifact contains separate
+`darwin_arm64` and `darwin_amd64` PKGs and portable `.tar.gz` archives. A PKG
+requires administrator access and installs `/usr/local/bin/shadowtalk` with
+documentation in `/usr/local/share/doc/shadowtalk`. A portable archive can be
+extracted and run with `./shadowtalk --version`. The public universal DMG contains
+the app rather than a PKG.
 
 GoReleaser also generates a Homebrew cask recipe. A public tap is not available
 yet, so `brew install shadowtalk` is not an advertised installation command.
@@ -118,6 +131,9 @@ distribution step; `apt install shadowtalk` alone will not find this project.
 
 ## First launch
 
+For the macOS app, choose **3 — Команды** before running these commands, or use
+**1 — Профиль** to open the profile screen. For other installations, use your terminal.
+
 ```sh
 shadowtalk --version
 shadowtalk ui
@@ -137,7 +153,8 @@ checks remain outstanding. See [the test report](testing/tor-live-exchange.md).
 the bundled Go dependency/toolchain notices and is also a separate release
 download. Find both files in the extracted portable archive, or after installing:
 
-- macOS PKG/DMG: `/usr/local/share/doc/shadowtalk/`.
+- macOS app: `ShadowTalk.app/Contents/Resources/Documentation/`.
+- Alternative macOS PKG: `/usr/local/share/doc/shadowtalk/`.
 - Windows setup: the installation directory, normally
   `%LOCALAPPDATA%\Programs\ShadowTalk\`.
 - Linux DEB/RPM: `/usr/share/doc/shadowtalk/`.

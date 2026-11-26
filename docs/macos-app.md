@@ -20,6 +20,10 @@ and `tor.json` keep their normal location in
 
 ## Compile from the current checkout
 
+For a release image, use the [verified alpha bundle](#wrap-the-existing-alpha-without-rebuilding-its-go-binaries)
+instead: the source-build command below intentionally produces **dev**. Before
+packaging a release DMG, check `shadowtalk --version` in the app's command prompt.
+
 On macOS, install Go 1.26+, Python 3.13+ and Apple's Xcode Command Line Tools
 (or Xcode). From the repository root:
 
@@ -99,7 +103,9 @@ documentation/notices come from the payload; `App Guide.md` describes this wrapp
 
 The old automated `package.py macos --dmg-template ...` integration still expects
 a **PKG-based** Canvas project. Use Canvas directly for this new app layout.
-The build script does not change that project or the nine-asset draft release.
+The build script does not change that project or upload release assets.
+The final first-alpha layout uses one universal DMG instead of the automated
+draft's two architecture-specific DMGs, for eight release assets in total.
 An app-only DMG does not install a global `shadowtalk` command; its own prompt
 provides the command without administrator access.
 
