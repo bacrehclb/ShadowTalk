@@ -19,11 +19,15 @@
   </p>
 
   <p><b>English</b> · <a href="README.ru.md">Русский</a></p>
+  <p><b><a href="https://github.com/bacrehclb/ShadowTalk/releases/tag/v0.1.0-alpha.1">Download v0.1.0-alpha.1</a></b> — macOS · Windows · Linux</p>
   <p>
+    <a href="#how-it-works">How it works</a> ·
     <a href="#quick-start">Quick start</a> ·
     <a href="#usage">Usage</a> ·
-    <a href="#troubleshooting">Troubleshooting</a> ·
-    <a href="#roadmap">Roadmap</a> ·
+    <a href="#troubleshooting">Troubleshooting</a><br>
+    <a href="#local-data-and-security">Local data</a> ·
+    <a href="#project-structure">Code guide</a> ·
+    <a href="#current-limits-and-next-checks">Limitations</a> ·
     <a href="#documentation">Documentation</a>
   </p>
 
@@ -56,6 +60,55 @@ ShadowTalk is an open-source terminal messenger written in Go. Create a local id
 
 Live delivery and restart recovery were verified through the public Tor network using obfs4 with two nodes on one macOS arm64 computer. Separate-device exchange and live Windows/Linux networking remain unverified. See the [live test report](docs/testing/tor-live-exchange.md) for the exact scope.
 
+## How it works
+
+### Identity and finding a contact
+
+There is no ShadowTalk account server or global nickname directory. Creating a
+profile generates a random **seed** — the secret from which your identity keys
+can be restored. ShadowTalk uses Ed25519 for the identity and derives separate
+keys for its onion service and local message history. Reopening the same profile
+keeps the same identity and onion address; creating another profile with the same
+nickname does not restore the old one.
+
+To find each other, you exchange **signed invitation tokens** outside ShadowTalk.
+A token carries a public identity key, an onion address and an expiry time.
+After comparing the full key fingerprint with the other person, each participant
+saves the other as a contact. The local alias is just a convenient label; trust
+and conversations are tied to the public key.
+
+### Connection and message delivery
+
+`shadowtalk chat` loads the profile and confirmed contacts, opens local history,
+starts its own Tor process and publishes the profile's onion service. In obfs4
+mode it also starts Lyrebird. The chat screen becomes usable after network startup.
+Each peer connection then uses **TLS 1.3 with mutual identity verification**:
+both sides must prove possession of a key already saved by the other participant.
+The invitation establishes which key to trust; TLS checks that key on connection.
+
+```mermaid
+sequenceDiagram
+    participant A as Alice's ShadowTalk
+    participant B as Bob's ShadowTalk
+    Note over A: Save outgoing message as pending
+    A->>B: TEXT through Tor + TLS 1.3
+    Note over B: Save incoming message locally
+    B-->>A: ACK for that message ID
+    Note over A: Mark message as delivered
+```
+
+Saving comes before sending. If the peer is unavailable or the acknowledgement
+is lost, the outgoing message remains in the local queue. ShadowTalk retries with
+the same message ID, including after a restart; the receiver recognizes duplicates
+instead of adding another copy to history.
+
+**Delivered** means the peer acknowledged saving the message. It is not a read
+receipt or independent proof of what a modified peer did. **Pending** means that
+acknowledgement has not arrived. Both participants need overlapping time with
+`chat` running and Tor ready: there is no shared message server or offline mailbox.
+Closing chat stops its network processes; it does not erase saved history or the
+outgoing queue.
+
 ## Quick start
 
 Both participants install ShadowTalk, create their own profile and configure Tor.
@@ -64,11 +117,10 @@ below uses Alice and Bob; run only the commands for your side on your own comput
 
 ### 1. Install ShadowTalk
 
-Choose a published version from [GitHub Releases](https://github.com/bacrehclb/ShadowTalk/releases)
-and follow the [installation guide](docs/install.md). If no release is available,
-use the `shadowtalk-packages` artifact from a successful
-[Packages run](https://github.com/bacrehclb/ShadowTalk/actions/workflows/packages.yml?query=branch%3Amain)
-on the intended commit. Read the version's limitations before installing.
+Download **[ShadowTalk v0.1.0-alpha.1](https://github.com/bacrehclb/ShadowTalk/releases/tag/v0.1.0-alpha.1)**.
+Open **Assets** on that page and choose the installer below. This is a published
+prerelease; read its release notes before installing. Other versions are listed
+in [GitHub Releases](https://github.com/bacrehclb/ShadowTalk/releases).
 
 | Platform | Architectures | Downloads |
 | --- | --- | --- |
@@ -77,7 +129,9 @@ on the intended commit. Read the version's limitations before installing.
 | Linux | `arm64`, `amd64` | `.deb`, `.rpm` |
 
 Download one installer for your OS and processor. Portable archives, standalone
-PKGs and maintainer files remain in the `shadowtalk-packages` CI artifact.
+PKGs and maintainer files remain in the `shadowtalk-packages` CI artifact from
+[Packages](https://github.com/bacrehclb/ShadowTalk/actions/workflows/packages.yml?query=branch%3Amain).
+GitHub's **Source code** archives contain source, not a ready-to-run application.
 
 Packages include a dependency notice file and are distributed with SHA-256
 checksums. Builds have no verified publisher signature; the macOS app has an
@@ -407,6 +461,11 @@ sharing logs. Keep private keys, profile files and message history out of issues
 
 ## Local data and security
 
+### Where the profile lives
+
+ShadowTalk stores data for the current OS user, separately from the installed
+executable. The macOS app and the standalone CLI use the same default location:
+
 | OS | Default profile directory |
 | --- | --- |
 | macOS | `~/Library/Application Support/shadowtalk` |
@@ -419,54 +478,124 @@ To use a different directory, put `--profile-dir` **before** the command:
 shadowtalk --profile-dir ./data/demo ui
 ```
 
-The private seed is encrypted in `identity-seed.json`; its encryption key stays in the OS credential store. ShadowTalk does not use a separate application password or fall back to storing that key in plaintext. Copying the profile directory alone is **not a portable backup** of the identity.
+Relative paths start at the terminal's working directory. Use the same
+`--profile-dir` for subsequent `profile`, `invite create`, `contacts` and `chat`
+commands to work with that identity. For example:
 
-`profile.json` and `contacts.json` contain unencrypted public metadata, including contact relationships. `messages.db` encrypts message text with a profile-derived key; peers, IDs, directions, times, message lengths and delivery metadata remain visible. The chat command opens history and resumes the saved outgoing queue. A nickname or invitation signature does not replace fingerprint verification. Read the [security notes](docs/security.md) for the implemented protections and their limits.
+```sh
+shadowtalk --profile-dir ./data/demo profile show
+shadowtalk --profile-dir ./data/demo chat
+```
 
-## Roadmap
+### What is stored
 
-- [x] Local profiles and encrypted identity storage
-- [x] Profile TUI
-- [x] Separate secure-channel and Tor transport modules
-- [x] Signed invitations and confirmed local contacts
-- [x] Connect profiles, contacts, Tor and TLS in the peer-session core
-- [x] Bounded text and acknowledgement wire protocol
-- [x] Live one-to-one chat core and events for the interface
-- [x] Connect peer sessions to CLI/TUI commands
-- [x] Verify a complete exchange over the public Tor network (obfs4, macOS arm64)
-- [ ] Verify chat between separate devices and complete platform smoke checks
-- [x] Terminal chat screen
-- [x] Encrypted local history storage API
-- [x] Connect history to chat, acknowledgements and delivery retries
-- [x] Release packaging and dependency notices for Windows, macOS and Linux
-- [ ] Publish the first reviewed alpha release
+These files appear as you create a profile, add contacts and open chat; not all
+exist immediately after installation.
 
-Group rooms and a possible GUI are future directions; their scope is not committed. The terminal client comes first.
+| Location | Contents and purpose |
+| --- | --- |
+| `profile.json` | Nickname, creation time and public identity key. Unencrypted metadata; no private key. |
+| `identity-seed.json` | The private seed encrypted with AES-256-GCM, plus the ID of its key in the OS credential store. |
+| `contacts.json` | Local aliases, confirmed public keys, onion addresses and contact dates. Unencrypted; reveals contact relationships. |
+| `messages.db` | SQLite history and outgoing delivery queue. Message text is encrypted with XChaCha20-Poly1305 using a key derived from the profile seed. |
+| `messages.db-wal`, `messages.db-shm` | SQLite companion files that may exist while history is open. They are part of the database's operation. |
+| `tor.json` | Optional connection settings: mode, executable paths, timeout and bridge lines. Plain text; create it as described in [Tor setup](#tor-setup). |
+| `tor/` | Tor's working data. Temporary `.shadowtalk-run-*` directories contain per-run control files and, in bridge mode, Lyrebird state; normal shutdown removes those temporary directories. |
+| `profile-pending.json` | Recovery journal with profile metadata, encrypted seed and OS key ID for interrupted creation or upgrade. Normally removed when the operation completes. |
+| `.profile.lock`, `.contacts.lock`, `.messages.lock`, `tor/.shadowtalk.lock` | Coordinate access to profile files, contacts, history and the Tor directory. Their presence alone does not mean the app is still running; do not delete them to bypass a lock. |
+| OS credential store, outside this directory | The random key that decrypts the seed: macOS Keychain, Windows Credential Manager or Linux Secret Service. The service name is `ShadowTalk/seed-encryption/v1`; the entry's account is the `key_id` from `identity-seed.json`. |
+
+Invitation files such as `alice.invite` are created wherever you redirect command
+output, not automatically inside the profile directory. They contain public
+identity and address data, so share them only with intended contacts.
+
+### What encryption protects
+
+Encryption protects the seed file and **message text**, not the entire profile
+directory or SQLite database. Peer keys, message IDs, directions, timestamps,
+message lengths and delivery metadata remain visible in history. There is no
+separate ShadowTalk password and no plaintext fallback for the OS encryption key.
+Access to an unlocked OS account and its credential store can expose the identity
+and history; local encryption is not protection against a compromised running OS.
+
+### Backups, upgrades and recovery
+
+Replacing the executable or app does not replace the profile. Keep using the same
+directory and OS account. Alpha storage formats may change, so read release notes
+before upgrading or downgrading.
+
+**Copying the profile directory alone is not a portable identity backup.** Restoring
+the identity requires both the encrypted seed and its matching OS key. History
+also needs the original seed to be decrypted. There is currently no supported
+portable backup/export command or synchronization between devices. A matching
+nickname, public key or invitation cannot recover the secret.
+
+`profile recover` finishes an interrupted local creation or upgrade using its saved
+journal and matching OS key. It cannot recreate secrets that are no longer stored.
+Close ShadowTalk before making a filesystem copy of the profile, and keep any
+SQLite companion files together with the database. Such a copy still does not
+include the OS key. Do not delete or hand-edit profile files
+to fix a startup error. The [security notes](docs/security.md) describe the formats,
+trust model and protection limits in more detail.
+
+<a id="roadmap"></a>
+
+## Current limits and next checks
+
+The first public alpha is **[v0.1.0-alpha.1](https://github.com/bacrehclb/ShadowTalk/releases/tag/v0.1.0-alpha.1)**.
+Its scope is one-to-one text chat with local history and delivery retries.
+
+- Separate-device exchange and live Windows/Linux networking still need validation; successful automated tests do not establish those results.
+- Tor and, for obfs4, Lyrebird must be installed separately. The chat screen currently requires successful Tor startup, including to browse saved history.
+- Contacts and invitations are managed by CLI commands; changes to contacts require restarting chat. The interface is currently in Russian.
+- Group chats, attachments, read receipts, a desktop GUI and multi-device synchronization are not implemented. The macOS `.app` opens Terminal.
+- History has no automatic retention limit; the 200-record UI limit only bounds what is loaded on screen.
+
+Group rooms and a possible GUI are future directions with no committed release
+date. The terminal client comes first.
 
 ## Project structure
 
-One Go module, one application binary:
+The application is one Go module with its executable entry point in
+[`cmd/shadowtalk`](cmd/shadowtalk). The terminal interface, chat rules, network
+transport and storage are separate packages. The macOS launcher is a packaging
+wrapper around this same executable.
 
-```text
-cmd/shadowtalk/          CLI commands and application entry point
-internal/
-  app/                  Profile, contact and network startup use cases
-  identity/             Nicknames, identity keys and onion-key derivation
-  contacts/             Signed invitations and contact rules
-  chat/                 Live conversations, text exchange and application events
-  history/              Persistent message records and paginated history API
-  delivery/             Durable outgoing queue, ACK processing and retries
-  peers/                Authenticated streams, connection limits and lifecycle
-  protocol/             Message framing, IDs, versions and size limits
-  onion/                Onion v3 address format
-  securechannel/        TLS with mutual identity verification
-  transport/tor/        Tor process, onion service and SOCKS connections
-  storage/              Profile files, contacts, OS keys and encrypted SQLite history
-  tui/                  Profile screens, chat, bounded history and safe rendering
-docs/                   Architecture, protocol and design decisions
-packaging/              Installers, license collection and release staging
-tests/integration/      Tests across module and process boundaries
-```
+| Module | Responsibility |
+| --- | --- |
+| [`cmd/shadowtalk`](cmd/shadowtalk) | Parses commands and flags, selects the profile directory, wires concrete services and translates errors for the user. Start reading at [`cli.go`](cmd/shadowtalk/cli.go); chat wiring is in [`chat_cli.go`](cmd/shadowtalk/chat_cli.go). |
+| [`internal/app`](internal/app) | Coordinates use cases: profile creation/recovery, contact import and network/history startup. [`StartDelivery`](internal/app/delivery.go) assembles the complete chat service and handles startup cleanup. |
+| [`internal/identity`](internal/identity) | Nickname rules, profiles, Ed25519 keys, seed encryption and separate onion/history key derivation. No filesystem or terminal UI. |
+| [`internal/contacts`](internal/contacts) | Invitation signing/validation, expiry, fingerprint confirmation and trusted contact rules. Persistence is provided separately. |
+| [`internal/tui`](internal/tui) | Bubble Tea profile and chat screens: keyboard input, contact selection, history paging and safe rendering. Calls services instead of issuing SQL or opening sockets. |
+| [`internal/delivery`](internal/delivery) | Saves outgoing messages, schedules retries, handles acknowledgements and saves incoming messages before acknowledging them. Owns delivery behavior, not the terminal. |
+| [`internal/chat`](internal/chat) | Live dialogs over authenticated sessions: sending/receiving text, acknowledgements and application events. Does not make messages durable by itself. |
+| [`internal/peers`](internal/peers) | Connects to confirmed contacts, accepts trusted incoming peers, applies connection limits and manages session lifetimes. |
+| [`internal/securechannel`](internal/securechannel) | Wraps an existing connection in TLS 1.3 and verifies pinned identity keys on both sides. Does not discover contacts or start Tor. |
+| [`internal/transport/tor`](internal/transport/tor) | Starts/stops Tor and Lyrebird, tracks bootstrap, publishes the onion service and dials through SOCKS. |
+| [`internal/onion`](internal/onion) | Parses and validates v3 onion addresses independently of a running Tor process. |
+| [`internal/protocol`](internal/protocol) | Versioned TEXT/ACK frames, message IDs, encoding and size limits. Contains wire rules, not connection management. |
+| [`internal/history`](internal/history) | Message records, duplicate/conflict semantics and storage/pagination interfaces. |
+| [`internal/storage`](internal/storage) | Concrete adapters: `profilefile` and `seedfile` for records, `profiledir` for coordinated creation/recovery, `keyring` for OS secrets, `contactsfile` for contacts, `torconfig` for JSON settings, `sqlite` for encrypted history and outbox. |
+| [`tests/integration`](tests/integration) | Checks interactions across modules and processes, including delivery after restart. Public Tor checks are opt-in. |
+| [`packaging`](packaging) | Installers, the macOS app launcher, dependency notices and release asset preparation. Build configuration is in [`.goreleaser.yaml`](.goreleaser.yaml) and [`.github/workflows`](.github/workflows). |
+| [`docs`](docs) | Architecture, protocol, security, design decisions and recorded validation results. |
+
+### Where to make a change
+
+| Change | Start here |
+| --- | --- |
+| Add a command or flag | [`cmd/shadowtalk/cli.go`](cmd/shadowtalk/cli.go) and the corresponding command file; put the use case in `internal/app`. |
+| Change chat keys or layout | [`internal/tui/chat.go`](internal/tui/chat.go) and [`chat_view.go`](internal/tui/chat_view.go). |
+| Change retries or delivery status | [`internal/delivery`](internal/delivery); keep the save-before-ACK rule and same-ID retries intact. |
+| Add a stored field | The owning storage adapter; for history, use [`SQLite migrations`](internal/storage/sqlite/migrations) and consider compatibility with existing profiles. |
+| Change the wire format | [`internal/protocol`](internal/protocol) and [`docs/protocol.md`](docs/protocol.md); consider peers running older versions. |
+| Change Tor configuration | [`storage/torconfig`](internal/storage/torconfig), [`transport/tor`](internal/transport/tor) and [`chat_network.go`](cmd/shadowtalk/chat_network.go). |
+| Change the macOS app or installers | [`packaging`](packaging) and the [app guide](docs/macos-app.md) / [release guide](docs/releases.md). |
+
+Tests live next to their packages in `*_test.go`. Keep domain and protocol rules
+independent of terminal rendering and filesystem details; see
+[Architecture](docs/architecture.md) for the dependency boundaries.
 
 ## Documentation
 
