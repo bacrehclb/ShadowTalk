@@ -165,7 +165,7 @@ Run `shadowtalk --version` to check the installation. See the
 
 ### Requirements
 
-- **Tor** for chat; **Lyrebird** as well when using obfs4 bridges. Install these separately and follow the [connection guide](docs/tor.md).
+- **Tor and Lyrebird** are included in builds for the upcoming alpha.2. The published alpha.1 still needs a separate installation. See [bundled Tor](docs/bundled-tor.md) and the [connection guide](docs/tor.md).
 - **An accessible OS credential store:** Keychain on macOS, Credential Manager on Windows, or Secret Service over a user D-Bus session on Linux. Linux needs a running secret service with an available login/default collection; D-Bus alone is not enough.
 - **An interactive terminal:** at least 40 × 20 for the profile UI and 60 × 20 for chat.
 
@@ -224,18 +224,23 @@ Creating a profile does not overwrite an existing one. `profile upgrade` adds ke
 
 ### 3. Configure Tor on each computer
 
-Download the stable [Tor Expert Bundle](https://download.torproject.org/tor/)
-for your OS and processor, extract it to a permanent folder, and keep its
-supporting libraries in place. Locate `tor` and, for bridges, `lyrebird`
-(`tor.exe` and `lyrebird.exe` on Windows). ShadowTalk starts and stops its own
-Tor process; opening Tor Browser does not configure ShadowTalk.
+Builds for **alpha.2** include Tor and Lyrebird and find them automatically.
+For direct Tor, no configuration file is required. ShadowTalk starts and stops
+its own process; opening Tor Browser does not configure ShadowTalk.
+
+For the published **alpha.1** or a source build without bundled runtimes, download
+the stable [Tor Expert Bundle](https://download.torproject.org/tor/) for your OS/CPU
+and keep its libraries alongside the binaries. Set `tor_binary` to your `tor`
+executable; for obfs4 also set `lyrebird_binary` to `lyrebird` (both end in `.exe`
+on Windows). These optional paths override bundled executables in alpha.2.
 
 Choose **direct Tor** if your network allows it, or **obfs4** if you need bridges.
 Alice and Bob may use different connection modes and different bridges.
 
-Create a plain-text **UTF-8 file without a BOM**, named `tor.json`, in your
-[profile directory](#local-data-and-security). Use one of these configurations.
-Replace example paths with the actual executable paths on your computer.
+For bridges or custom settings, create a plain-text **UTF-8 file without a BOM**,
+named `tor.json`, in your [profile directory](#local-data-and-security).
+The examples use automatic executable discovery in alpha.2. For alpha.1, add
+the executable paths described above.
 
 **Direct connection:**
 
@@ -243,13 +248,13 @@ Replace example paths with the actual executable paths on your computer.
 {
   "version": 1,
   "mode": "direct",
-  "tor_binary": "/absolute/path/to/tor",
   "startup_timeout": "5m"
 }
 ```
 
-If `tor` is already on PATH, omit `tor_binary`. With no default `tor.json`,
-ShadowTalk also uses direct Tor from PATH, with a 3-minute startup timeout.
+Without `tor_binary`, ShadowTalk uses its bundled Tor, or PATH when no bundle
+is installed. With no default `tor.json`, it uses direct Tor with a 3-minute
+startup timeout. Existing explicit paths remain active after an upgrade.
 
 **Connection through obfs4 bridges:** get fresh **obfs4** bridge lines from
 [Tor Project's bridge service](https://bridges.torproject.org/) or the alternatives
@@ -260,8 +265,6 @@ Replace the entire example bridge line below with a real one:
 {
   "version": 1,
   "mode": "obfs4",
-  "tor_binary": "/absolute/path/to/tor",
-  "lyrebird_binary": "/absolute/path/to/lyrebird",
   "startup_timeout": "5m",
   "bridges": [
     "obfs4 IP:PORT FINGERPRINT cert=CERTIFICATE iat-mode=0"
@@ -274,7 +277,7 @@ strings. Keep its fingerprint, `cert` and `iat-mode` exactly as supplied. The
 example is a placeholder, not a working bridge. ShadowTalk supports 1–16 obfs4
 lines; Snowflake and WebTunnel are not supported by this version.
 
-On **Windows**, use paths such as `C:/Tools/Tor/tor/tor.exe` and the actual path
+For custom executables on **Windows**, use paths such as `C:/Tools/Tor/tor/tor.exe` and the actual path
 to `lyrebird.exe`. Forward slashes work in JSON; backslashes must be doubled.
 Make sure your editor saved `tor.json`, not `tor.json.txt`.
 
@@ -399,7 +402,7 @@ For a configuration file outside the default profile directory:
 shadowtalk chat --contact bob --tor-config "/absolute/path/to/tor.json"
 ```
 
-If Tor is not on PATH, specify its executable (including `tor.exe` on Windows):
+To override the bundled Tor, specify your executable (including `tor.exe` on Windows):
 
 ```sh
 shadowtalk chat --tor-binary "/path/to/tor" --startup-timeout 5m
@@ -546,7 +549,7 @@ The first public alpha is **[v0.1.0-alpha.1](https://github.com/bacrehclb/Shadow
 Its scope is one-to-one text chat with local history and delivery retries.
 
 - Separate-device exchange and live Windows/Linux networking still need validation; successful automated tests do not establish those results.
-- Tor and, for obfs4, Lyrebird must be installed separately. The chat screen currently requires successful Tor startup, including to browse saved history.
+- Bundled Tor is included in the upcoming alpha.2; alpha.1 still requires manual installation. Bridges may still be necessary. The chat screen requires successful Tor startup, including to browse saved history.
 - Contacts and invitations are managed by CLI commands; changes to contacts require restarting chat. The interface is currently in Russian.
 - Group chats, attachments, read receipts, a desktop GUI and multi-device synchronization are not implemented. The macOS `.app` opens Terminal.
 - History has no automatic retention limit; the 200-record UI limit only bounds what is loaded on screen.
@@ -572,6 +575,7 @@ wrapper around this same executable.
 | [`internal/chat`](internal/chat) | Live dialogs over authenticated sessions: sending/receiving text, acknowledgements and application events. Does not make messages durable by itself. |
 | [`internal/peers`](internal/peers) | Connects to confirmed contacts, accepts trusted incoming peers, applies connection limits and manages session lifetimes. |
 | [`internal/securechannel`](internal/securechannel) | Wraps an existing connection in TLS 1.3 and verifies pinned identity keys on both sides. Does not discover contacts or start Tor. |
+| [`internal/torbundle`](internal/torbundle) | Locates packaged Tor/Lyrebird relative to the application, with explicit paths taking precedence. No downloads or profile changes. |
 | [`internal/transport/tor`](internal/transport/tor) | Starts/stops Tor and Lyrebird, tracks bootstrap, publishes the onion service and dials through SOCKS. |
 | [`internal/onion`](internal/onion) | Parses and validates v3 onion addresses independently of a running Tor process. |
 | [`internal/protocol`](internal/protocol) | Versioned TEXT/ACK frames, message IDs, encoding and size limits. Contains wire rules, not connection management. |
@@ -607,6 +611,7 @@ These links follow the checked-out branch or release tag. Most technical documen
 | [Architecture](docs/architecture.md) | Module boundaries and dependencies |
 | [Protocol](docs/protocol.md) | Invitations, text frames and acknowledgement format |
 | [Security](docs/security.md) | Key storage, trust and limitations |
+| [Bundled Tor](docs/bundled-tor.md) | Automatic discovery, runtime locations, verified build downloads and updating the pin |
 | [Tor transport](docs/tor.md) | Runtime setup, lifecycle and validation status |
 | [Design decisions](docs/decisions) | Rationale behind the implementation |
 | [Installation](docs/install.md) | Packages, runtime dependencies and first launch |

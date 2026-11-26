@@ -14,7 +14,8 @@ open a profile, access Keychain or start Tor until you choose an action.
 
 The app includes both Apple Silicon and Intel binaries. The launcher requires
 macOS 12 or newer; this is a build minimum, not a claim of testing on every
-macOS version. Tor and Lyrebird remain separate dependencies. Existing profiles
+macOS version. Builds from this checkout include Tor and Lyrebird for both CPUs;
+wrapping the original alpha.1 payload retains its separate-dependency behavior. Existing profiles
 and `tor.json` keep their normal location in
 `~/Library/Application Support/shadowtalk`.
 
@@ -32,7 +33,8 @@ python3 packaging/macos_app.py
 ```
 
 The result is **`dist/macos-app/ShadowTalk.app`**. The script compiles the current
-Go sources for arm64 and amd64, collects dependency notices, builds the native
+Go sources for arm64 and amd64, downloads and verifies the pinned Tor runtimes,
+collects dependency notices, builds the native
 launcher and includes `packaging/macos/ShadowTalk.icns`. That icon was exported
 from the same artwork as `docs/assets/shadowtalk-logo.png`.
 
@@ -109,7 +111,7 @@ draft's two architecture-specific DMGs, for eight release assets in total.
 An app-only DMG does not install a global `shadowtalk` command; its own prompt
 provides the command without administrator access.
 
-The builder applies **ad-hoc code signatures** to the universal binary and app
+The builder applies **ad-hoc code signatures** to the universal binary, bundled Tor code and app
 and verifies them locally. These are not Developer ID signatures or Apple
 notarization; downloaded copies may still be blocked by Gatekeeper. Publisher
 signing/notarization is a separate release step. Do not describe these packages

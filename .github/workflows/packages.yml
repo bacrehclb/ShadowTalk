@@ -70,6 +70,9 @@ jobs:
           shadowtalk --help
           test -f /usr/share/doc/shadowtalk/docs/install.md
           test -f /usr/share/doc/shadowtalk/docs/testing/tor-live-exchange.md
+          LD_LIBRARY_PATH=/usr/lib/shadowtalk/tor-runtime/linux-amd64/tor /usr/lib/shadowtalk/tor-runtime/linux-amd64/tor/tor --version
+          /usr/lib/shadowtalk/tor-runtime/linux-amd64/tor/pluggable_transports/lyrebird -version
+          test -f /usr/lib/shadowtalk/tor-runtime/linux-amd64/docs/tor.txt
           sudo dpkg -r shadowtalk
       - uses: actions/upload-artifact@v4
         with:
@@ -100,6 +103,7 @@ jobs:
         with:
           name: archive-packages
           path: dist
+      - run: python packaging/package.py sign-macos
       - run: python packaging/package.py verify
       - run: python packaging/package.py macos
       - name: Install and inspect the native package on the runner
@@ -110,11 +114,17 @@ jobs:
           cd "$RUNNER_TEMP"
           /usr/local/bin/shadowtalk --version
           /usr/local/bin/shadowtalk --help
+          /usr/local/lib/shadowtalk/tor-runtime/darwin-${arch}/tor/tor --version
           pkgutil --files io.github.bacrehclb.shadowtalk
+      - name: Stage finalized macOS archives and installers
+        run: |
+          mkdir -p dist/macos-final/homebrew/Casks
+          cp dist/installers/* dist/*_darwin_*.tar.gz dist/macos-final/
+          cp dist/homebrew/Casks/shadowtalk.rb dist/macos-final/homebrew/Casks/
       - uses: actions/upload-artifact@v4
         with:
           name: macos-installers
-          path: dist/installers/*
+          path: dist/macos-final
           if-no-files-found: error
           retention-days: 7
 

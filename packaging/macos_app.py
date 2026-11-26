@@ -16,6 +16,7 @@ import tempfile
 import notices
 import package
 import release
+import tor_bundle
 
 ROOT = package.ROOT
 RESOURCES = ROOT / "packaging/macos"
@@ -29,6 +30,7 @@ def run(*args, **kwargs):
 
 def source_payload(work):
     """A local build is always dev, even when the checkout has an alpha tag."""
+    runtimes = [tor_bundle.prepare(f"darwin-{arch}") for arch in ("arm64", "amd64")]
     commit = release.git(ROOT, "rev-parse", "HEAD")
     if release.git(ROOT, "status", "--porcelain"):
         commit += "-dirty"
@@ -45,7 +47,7 @@ def source_payload(work):
     report = work / package.NOTICES
     print("Collecting dependency notices...", flush=True)
     report.write_bytes(notices.generate(ROOT))
-    return binaries, ROOT, report, {"version": "dev", "commit": commit, "date": date}
+    return binaries, ROOT, report, {"version": "dev", "commit": commit, "date": date}, runtimes
 
 
 def release_payload(bundle, work):
@@ -53,6 +55,7 @@ def release_payload(bundle, work):
     metadata = json.loads((bundle / "metadata.json").read_text(encoding="utf-8"))
     release.validate_bundle(bundle, metadata["tag"], metadata["commit"])
     binaries = []
+    runtimes = []
     for arch in ("arm64", "amd64"):
         directory = work / arch
         package.unpack(bundle / f"shadowtalk_{metadata['version']}_darwin_{arch}.tar.gz", directory)
@@ -62,7 +65,16 @@ def release_payload(bundle, work):
         if (directory / package.NOTICES).read_bytes() != (bundle / package.NOTICES).read_bytes():
             raise ValueError("archive notices differ from the verified release bundle")
         binaries.append(binary)
-    return binaries, work / "arm64", bundle / package.NOTICES, metadata
+        runtime = directory / "bin/tor-runtime" / f"darwin-{arch}"
+        if runtime.exists():
+            tor_bundle.verify(runtime, f"darwin-{arch}")
+            runtimes.append(runtime)
+    if len(runtimes) not in (0, 2):
+        raise ValueError("both macOS archives must contain their Tor runtime")
+    # Old alpha.1 binaries have no bundle discovery: preserve their old behavior.
+    if not runtimes and metadata["tag"] != "v0.1.0-alpha.1":
+        raise ValueError("alpha archives must include Tor runtimes")
+    return binaries, work / "arm64", bundle / package.NOTICES, metadata, runtimes
 
 
 def build(output, bundle=None):
@@ -76,7 +88,7 @@ def build(output, bundle=None):
     # Stage beside the destination: a failed build never leaves a partial .app.
     with tempfile.TemporaryDirectory(prefix=".shadowtalk-app-", dir=output.parent) as temporary:
         work = Path(temporary)
-        binaries, docs_source, report, metadata = (
+        binaries, docs_source, report, metadata, runtimes = (
             release_payload(bundle, work) if bundle else source_payload(work))
         app = work / "ShadowTalk.app"
         contents = app / "Contents"
@@ -84,6 +96,10 @@ def build(output, bundle=None):
         resources = contents / "Resources"
         executables.mkdir(parents=True)
         resources.mkdir()
+        for source in runtimes:
+            installed = resources / "tor-runtime" / source.name
+            shutil.copytree(source, installed)
+            tor_bundle.sign_macos(installed, source.name)
         for binary, arch in zip(binaries, ("arm64", "x86_64")):
             run("/usr/bin/lipo", binary, "-verify_arch", arch)
         run("/usr/bin/lipo", "-create", *binaries, "-output", executables / "shadowtalk")
@@ -127,6 +143,8 @@ def build(output, bundle=None):
             "packaging_dirty": bool(release.git(ROOT, "status", "--porcelain")),
             "architectures": ["arm64", "x86_64"],
             "signing": "ad-hoc; no Developer ID or notarization",
+            "tor_runtimes": [json.loads((resources / "tor-runtime" / source.name / "runtime.json").read_text(encoding="utf-8"))
+                             for source in runtimes],
         }
         (resources / "build.json").write_text(json.dumps(provenance, indent=2) + "\n", encoding="utf-8")
         # Universal merging changes the Mach-O layout. Sign nested code first;
@@ -134,6 +152,10 @@ def build(output, bundle=None):
         run("/usr/bin/codesign", "--force", "--sign", "-", executables / "shadowtalk")
         run("/usr/bin/codesign", "--force", "--sign", "-", app)
         run("/usr/bin/codesign", "--verify", "--deep", "--strict", app)
+        if runtimes:
+            import platform
+            native = "arm64" if platform.machine() == "arm64" else "amd64"
+            tor_bundle.smoke(resources / "tor-runtime" / f"darwin-{native}", f"darwin-{native}")
         for name in ("shadowtalk", LAUNCHER):
             for arch in ("arm64", "x86_64"):
                 run("/usr/bin/lipo", executables / name, "-verify_arch", arch)

@@ -75,6 +75,9 @@ func startProcess(ctx context.Context, options Options) (_ *process, err error) 
 		return nil, ErrDataDirectory
 	}
 	p.command = exec.Command(binary, torArguments(directory, p.runDir)...)
+	if runtime.GOOS == "linux" && options.LibraryDir != "" {
+		p.command.Env = libraryEnvironment(os.Environ(), options.LibraryDir)
+	}
 	// Tor/control messages can contain addresses and key material. Raw logs are
 	// deliberately not forwarded to the terminal or included in returned errors.
 	p.command.Stdout, p.command.Stderr = io.Discard, io.Discard
@@ -88,6 +91,16 @@ func startProcess(ctx context.Context, options Options) (_ *process, err error) 
 		close(p.done)
 	}()
 	return p, nil
+}
+
+func libraryEnvironment(inherited []string, directory string) []string {
+	result := make([]string, 0, len(inherited)+1)
+	for _, entry := range inherited {
+		if !strings.HasPrefix(entry, "LD_LIBRARY_PATH=") {
+			result = append(result, entry)
+		}
+	}
+	return append(result, "LD_LIBRARY_PATH="+directory)
 }
 
 func torArguments(directory, runDir string) []string {

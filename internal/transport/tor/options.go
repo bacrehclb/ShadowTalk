@@ -4,6 +4,8 @@ package tor
 
 import (
 	"errors"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/bacrehclb/ShadowTalk/internal/onion"
@@ -32,6 +34,9 @@ type Options struct {
 	OnProgress func(Progress)
 	// BinaryPath defaults to "tor" on PATH. Nothing is downloaded at runtime.
 	BinaryPath string
+	// LibraryDir is set by packaging discovery for the Linux Expert Bundle.
+	// It applies only to the Tor child, never to this application or the OS.
+	LibraryDir string
 	// DataDir must be dedicated to ShadowTalk's Tor instance. It retains guard
 	// state and directory caches across runs. One running node may own it.
 	DataDir string
@@ -49,6 +54,9 @@ func (o Options) defaults() (Options, error) {
 	}
 	o.Connection.Bridges = append([]string(nil), o.Connection.Bridges...)
 	if o.DataDir == "" || o.StartTimeout < 0 || o.DialTimeout < 0 || o.ShutdownTimeout < 0 {
+		return o, ErrInvalidOptions
+	}
+	if o.LibraryDir != "" && (!filepath.IsAbs(o.LibraryDir) || strings.Contains(o.LibraryDir, ":")) {
 		return o, ErrInvalidOptions
 	}
 	if o.BinaryPath == "" {

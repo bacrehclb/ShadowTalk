@@ -42,6 +42,10 @@ try {
         }
         & shadowtalk --help
         if ($LASTEXITCODE -ne 0) { throw 'Installed help failed' }
+        & "$directory\bin\tor-runtime\windows-amd64\tor\tor.exe" --version
+        if ($LASTEXITCODE -ne 0) { throw 'Bundled Tor failed' }
+        & "$directory\bin\tor-runtime\windows-amd64\tor\pluggable_transports\lyrebird.exe" -version
+        if ($LASTEXITCODE -ne 0) { throw 'Bundled Lyrebird failed' }
     } finally { Pop-Location }
     $laterPath = ';C:\Another tool installed later'
     [Environment]::SetEnvironmentVariable('Path', $installedPath + $laterPath, 'User')

@@ -1,0 +1,13 @@
+{
+  "version": "16.0.3",
+  "tor_version": "0.4.9.17",
+  "base_url": "https://dist.torproject.org/torbrowser/16.0.3/",
+  "signing_key": "EF6E286DDA85EA2A4BA7DE684E2C6E8793298290",
+  "targets": {
+    "darwin-arm64": {"archive": "tor-expert-bundle-macos-aarch64-16.0.3.tar.gz", "sha256": "0afc78ae11288edd5e5cbb6f3ca45ede0505f275aabd95ccccd620630ee59e28"},
+    "darwin-amd64": {"archive": "tor-expert-bundle-macos-x86_64-16.0.3.tar.gz", "sha256": "57b86966733bc1abf7f2aedaad95a94f4dd79517bdadf9028260f2ac97204a8a"},
+    "linux-arm64": {"archive": "tor-expert-bundle-linux-aarch64-16.0.3.tar.gz", "sha256": "4252a9635fa7c9ab65bb26568364f76adaf0b7f23a1e60448c2d855afdd3f57b"},
+    "linux-amd64": {"archive": "tor-expert-bundle-linux-x86_64-16.0.3.tar.gz", "sha256": "a3fae0d3c263b81ba09e3446bd2af92bc9f8f6edf5bd8f16ab666c6140dc29f7"},
+    "windows-amd64": {"archive": "tor-expert-bundle-windows-x86_64-16.0.3.tar.gz", "sha256": "b70cabe2b93b5b1fd144466e42afaabe7a1a470228912657b3b5776e9cb7a9f1"}
+  }
+}

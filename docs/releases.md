@@ -48,6 +48,7 @@ cp bin/notices/THIRD_PARTY_NOTICES.txt dist/THIRD_PARTY_NOTICES.txt
 python3 packaging/package.py verify
 
 # On macOS: build both Intel and Apple Silicon PKG/DMG files.
+python3 packaging/package.py sign-macos
 python3 packaging/package.py macos
 ```
 
@@ -89,7 +90,10 @@ to `dist/` as a standalone asset. The local commands above perform the same copy
 The same report ships in every portable archive, native installation and as a
 separate release asset. Upstream third-party notice documents are preserved
 verbatim, including any text about components that our binary does not use.
-Tor and Lyrebird are separate downloads and are not included in this inventory.
+For alpha.2, Tor and Lyrebird are bundled separately from the Go dependency graph;
+their original license texts ship in each runtime's `docs/` directory. The build
+fetches pinned archives through [`tor_bundle.py`](../packaging/tor_bundle.py);
+see [bundled Tor](bundled-tor.md) for signature provenance and the update process.
 ShadowTalk's own MIT license remains in `LICENSE`.
 
 Missing/empty license texts and replaced modules stop generation for review.
@@ -211,7 +215,8 @@ The current pipeline creates **unsigned** packages. Before public distribution,
 choose whether to ship the experimental alpha with that limitation or configure
 Developer ID signing/notarization and Windows Authenticode in a separate step.
 Do not describe these builds as signed. Review the generated third-party notice
-report for the selected release; Tor/Lyrebird remain separate dependencies.
+report for the selected release. For alpha.2, Tor/Lyrebird are packaged dependencies
+with their own license texts and pinned downloads; see [bundled Tor](bundled-tor.md).
 
 ### Create the draft after the main merge
 

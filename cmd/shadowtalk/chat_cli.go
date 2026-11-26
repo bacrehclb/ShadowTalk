@@ -27,12 +27,13 @@ const chatUsage = `Использование:
   shadowtalk [--profile-dir PATH] chat [--contact NAME] [--tor-config PATH] [--tor-binary PATH] [--startup-timeout 3m]
 
 Открывает терминальный чат с сохранёнными контактами. Нужны терминальные stdin
-и stdout, окно от 60 × 20, существующий профиль и Tor (tor/tor.exe в PATH).
---tor-binary задаёт исполняемый файл Tor; загрузки Tor из интернета нет.
+и stdout, окно от 60 × 20 и существующий профиль.
+Tor и Lyrebird выбираются из комплекта приложения; без комплекта — из PATH.
+--tor-binary задаёт свой исполняемый файл Tor. Во время запуска чат ничего не скачивает.
 --tor-config выбирает JSON настроек; по умолчанию tor.json внутри профиля.
 Если tor.json отсутствует, используется прямое подключение. Ошибка файла
 останавливает запуск. Флаги --tor-binary и --startup-timeout имеют приоритет.
-Для obfs4 нужны mode=obfs4, lyrebird_binary и bridges в конфигурации.
+Для obfs4 нужны mode=obfs4 и bridges; lyrebird_binary необязателен.
 --startup-timeout ограничивает запуск Tor: от 1s до 15m, по умолчанию 3m.
 --contact выбирает начальный диалог по локальному имени.
 

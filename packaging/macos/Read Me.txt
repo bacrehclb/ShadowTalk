@@ -7,12 +7,12 @@ Then open Terminal and run:
     shadowtalk --version
     shadowtalk ui
 
-Configure Tor (and Lyrebird for obfs4 bridges), exchange invitations with your
+Tor and Lyrebird are included. Configure bridges if needed, exchange invitations with your
 contact, then run:
 
     shadowtalk chat
 
-Go is not required. Tor and Lyrebird are separate dependencies.
+Go is not required. Tor and Lyrebird are selected automatically.
 Each device needs its own profile and access to its OS credential store.
 
 Setup instructions:
