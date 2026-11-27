@@ -1,8 +1,7 @@
-# Bundled Tor (next alpha)
+# Bundled Tor
 
-Builds from this checkout include Tor and Lyrebird. This change targets
-`v0.1.0-alpha.2`; the published `v0.1.0-alpha.1` still requires a separate Tor
-installation. Nothing is downloaded during profile creation, `--help`,
+Installers since `v0.1.0-alpha.2` include Tor and Lyrebird. Older
+`v0.1.0-alpha.1` builds require a separate Tor installation. Nothing is downloaded during profile creation, `--help`,
 `--version` or chat startup. The build downloads the dependencies once and puts
 them inside the user's installer, so installation does not need to reach the Tor
 download website.
@@ -12,7 +11,10 @@ download website.
 For a network that allows direct Tor, create a profile, exchange invitations and
 run `shadowtalk chat`. No `tor.json` or executable paths are required.
 
-For obfs4, create a private `tor.json` in the profile directory:
+In the alpha.3 source, use `shadowtalk menu` → **Настройки Tor и мосты** to paste
+bridge lines and save the configuration automatically.
+
+Alternatively, for obfs4 create a private `tor.json` in the profile directory:
 
 ```json
 {

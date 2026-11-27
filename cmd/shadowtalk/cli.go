@@ -23,6 +23,7 @@ const usage = `ShadowTalk — терминальный P2P-чат
 
 Использование:
   shadowtalk --version
+  shadowtalk [--profile-dir PATH] menu
   shadowtalk [--profile-dir PATH] ui
   shadowtalk [--profile-dir PATH] chat [--contact NAME] [--tor-binary PATH]
   shadowtalk [--profile-dir PATH] profile create --nick NICK
@@ -36,6 +37,8 @@ const usage = `ShadowTalk — терминальный P2P-чат
   shadowtalk [--profile-dir PATH] contacts show --alias NAME
   shadowtalk [--profile-dir PATH] contacts remove --alias NAME --fingerprint SHA256:...
 
+menu — общее меню: профиль, чат, приглашения, контакты и настройки Tor.
+Без аргументов в терминале открывается menu; в pipe выводится справка.
 ui открывает терминальный интерфейс профиля (нужны терминальные stdin и stdout).
 chat открывает переписку через Tor; параметры и клавиши — chat --help.
 create создаёт профиль и сохраняет ключи в системном хранилище ОС.
@@ -82,8 +85,14 @@ func executeWithInput(args []string, stdin io.Reader, stdout io.Writer, keys app
 		return printVersion(stdout)
 	}
 	if len(args) == 0 {
+		if menuTerminal(stdin, stdout) {
+			return executeMenu(nil, *directory, stdin, stdout, keys)
+		}
 		_, err := fmt.Fprintln(stdout, usage)
 		return err
+	}
+	if args[0] == "menu" {
+		return executeMenu(args[1:], *directory, stdin, stdout, keys)
 	}
 	if args[0] == "invite" {
 		return executeInvite(args[1:], *directory, stdin, stdout, keys)

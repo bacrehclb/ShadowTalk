@@ -15,19 +15,23 @@ fi
 # inside a possibly read-only app bundle. Profiles still use the normal OS path.
 cd "$HOME" || exit 1
 
+if "$SHADOWTALK_APP_BINARY" menu --help >/dev/null 2>&1; then
+    exec "$SHADOWTALK_APP_BINARY" menu
+fi
+
+# Compatibility when wrapping the unchanged alpha.1/alpha.2 payload.
 while true; do
-    printf '\nShadowTalk\n\n  1  Профиль — создание и просмотр\n  2  Чат — сохранённые контакты\n  3  Команды — приглашения, контакты и справка\n  0  Выход\n\n'
-    printf 'Выберите действие [1]: '
+    printf '\nShadowTalk\n\n  1  Профиль\n  2  Чат\n  3  Команды\n  0  Выход\n\nВыберите действие [1]: '
     IFS= read -r choice || exit 0
     case "$choice" in
         1|'') "$SHADOWTALK_APP_BINARY" ui ;;
         2) "$SHADOWTALK_APP_BINARY" chat ;;
         3) /bin/bash --noprofile --rcfile "$resources/terminal.bash" -i ;;
         0) exit 0 ;;
-        *) printf 'Введите 1, 2, 3 или 0.\n'; continue ;;
+        *) continue ;;
     esac
     result=$?
     if [[ $result -ne 0 ]]; then
-        printf '\nКоманда завершилась с кодом %s. Сообщение об ошибке показано выше.\n' "$result"
+        printf '\nКоманда завершилась с кодом %s.\n' "$result"
     fi
 done

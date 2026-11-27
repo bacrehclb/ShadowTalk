@@ -117,7 +117,7 @@ below uses Alice and Bob; run only the commands for your side on your own comput
 
 ### 1. Install ShadowTalk
 
-Download **[ShadowTalk v0.1.0-alpha.1](https://github.com/bacrehclb/ShadowTalk/releases/tag/v0.1.0-alpha.1)**.
+Download **[ShadowTalk v0.1.0-alpha.2](https://github.com/bacrehclb/ShadowTalk/releases/tag/v0.1.0-alpha.2)**.
 Open **Assets** on that page and choose the installer below. This is a published
 prerelease; read its release notes before installing. Other versions are listed
 in [GitHub Releases](https://github.com/bacrehclb/ShadowTalk/releases).
@@ -165,9 +165,9 @@ Run `shadowtalk --version` to check the installation. See the
 
 ### Requirements
 
-- **Tor and Lyrebird** are included in builds for the upcoming alpha.2. The published alpha.1 still needs a separate installation. See [bundled Tor](docs/bundled-tor.md) and the [connection guide](docs/tor.md).
+- **Tor and Lyrebird** are included since alpha.2. Older alpha.1 builds need a separate installation. See [bundled Tor](docs/bundled-tor.md) and the [connection guide](docs/tor.md).
 - **An accessible OS credential store:** Keychain on macOS, Credential Manager on Windows, or Secret Service over a user D-Bus session on Linux. Linux needs a running secret service with an available login/default collection; D-Bus alone is not enough.
-- **An interactive terminal:** at least 40 × 20 for the profile UI and 60 × 20 for chat.
+- **An interactive terminal:** at least 40 × 20 for the profile UI and 60 × 20 for the menu and chat.
 
 ### 2. Create your profile
 
@@ -204,6 +204,44 @@ The interface and command output are currently in Russian. The TUI requires term
 
 ## Usage
 
+### Menu workflow (alpha.3 source / next release)
+
+The current source adds `shadowtalk menu`. Running `shadowtalk` without arguments
+also opens it when both streams are terminals. The new macOS app opens this menu
+automatically. **The published alpha.2 still uses the older three-item launcher
+shown above; rebuild from this checkout to try the new menu.**
+
+1. Choose **Профиль** (Profile), enter a nickname and press Enter. Press Esc to return.
+2. Choose **Настройки Tor и мосты** (Tor settings). Select direct access or obfs4.
+   For obfs4, paste complete bridge lines together, one per line. Press **Ctrl+S**,
+   set the timeout (for example `5m`) and leave executable paths empty to use the
+   bundled runtime. **Tab** moves between fields; **Ctrl+S** saves.
+3. Choose **Создать приглашение** (Create invitation); `24h` is the default lifetime.
+   Press **c** to copy the token, **f** to copy the fingerprint, or **s** to save a
+   new invitation file. Existing files are never overwritten. On macOS copying
+   uses the OS clipboard; other terminals need OSC 52 support, otherwise use a file.
+4. Exchange invitations **in both directions**. Choose **Добавить контакт** (Add
+   contact), paste the full token or enter its file path, then press Ctrl+S.
+   Review the identity, choose a local alias and paste the full fingerprint received
+   from the other person through a trusted channel. Confirm to save the contact.
+   The token starts with `shadowtalk://invite/v1/`; `SHA256:…` is only its fingerprint.
+5. Both participants choose **Открыть чат** (Open chat) and wait for Tor to be ready.
+   **Контакты** (Contacts) also lets you select a conversation or explicitly confirm
+   removal of a contact. Removal keeps history and does not revoke invitations.
+
+**Esc** returns without saving an unfinished form. **Ctrl+C** exits the current
+screen after any active write completes; from profile/chat it returns to the menu.
+The menu requires a terminal of at least **60 × 20**. It does not start Tor until
+chat opens. Configuration is saved as private `tor.json` in the current profile;
+new values apply on the next chat launch. Concurrent configuration edits are
+rejected with a reload instruction. Invalid settings do not replace the saved file.
+
+Bridge acquisition is not automatic in this version. The menu includes the
+[Tor Project bridge website](https://bridges.torproject.org/) and
+[official Telegram bot](https://t.me/GetBridgesBot) (`/start`, then `/obfs4`).
+Pasted bridge lines are validated and saved automatically; availability is only
+established by connecting. The commands below remain supported, including alpha.2.
+
 ### Manage your profile
 
 If you have not created a profile through the TUI:
@@ -224,11 +262,11 @@ Creating a profile does not overwrite an existing one. `profile upgrade` adds ke
 
 ### 3. Configure Tor on each computer
 
-Builds for **alpha.2** include Tor and Lyrebird and find them automatically.
+Builds since **alpha.2** include Tor and Lyrebird and find them automatically.
 For direct Tor, no configuration file is required. ShadowTalk starts and stops
 its own process; opening Tor Browser does not configure ShadowTalk.
 
-For the published **alpha.1** or a source build without bundled runtimes, download
+For older **alpha.1** or a source build without bundled runtimes, download
 the stable [Tor Expert Bundle](https://download.torproject.org/tor/) for your OS/CPU
 and keep its libraries alongside the binaries. Set `tor_binary` to your `tor`
 executable; for obfs4 also set `lyrebird_binary` to `lyrebird` (both end in `.exe`
@@ -408,7 +446,7 @@ To override the bundled Tor, specify your executable (including `tor.exe` on Win
 shadowtalk chat --tor-binary "/path/to/tor" --startup-timeout 5m
 ```
 
-The screen shows Tor's bootstrap percentage and stage, then contacts, history and the message editor. The default Tor startup timeout is 3 minutes; `--startup-timeout` accepts 1 second to 15 minutes. History opens after Tor is ready. Omitting `--contact` selects the first saved contact. Contacts and invitations are managed using the commands above; restart chat to apply changes.
+The screen shows Tor's bootstrap percentage and stage, then contacts, history and the message editor. The default Tor startup timeout is 3 minutes; `--startup-timeout` accepts 1 second to 15 minutes. History opens after Tor is ready. Omitting `--contact` selects the first saved contact. Use the menu in alpha.3 source builds or the commands above to manage contacts and invitations; reopen chat to apply changes.
 
 Connection settings can be saved in `tor.json` inside the profile directory, or selected with `chat --tor-config "/path/to/tor.json"`. Explicit `--tor-binary` and `--startup-timeout` flags override the file. A missing default file uses direct Tor; an invalid file stops startup. Retrying with Enter / `r` reloads the file.
 
@@ -446,7 +484,7 @@ saved history and queued messages use the same profile. Times in chat are UTC.
 
 | Symptom | What to check |
 | --- | --- |
-| `shadowtalk` is not found | For the macOS app, use **3 — Команды** in its menu. On Windows, enable the installer's PATH option and open a new terminal; for a portable build, use the executable's full path. |
+| `shadowtalk` is not found | For the macOS app, use the menu or `/Applications/ShadowTalk.app/Contents/MacOS/shadowtalk` for commands. On Windows, enable the installer's PATH option and open a new terminal; for a portable build, use the executable's full path. |
 | `ui` shows a profile but no conversation | Exit with Esc and run `shadowtalk chat`; invitations and contacts are managed with the commands in step 4. |
 | Tor or Lyrebird is not found | Point `tor_binary` / `lyrebird_binary` to the executable, not its folder. On Windows include `.exe`; keep Expert Bundle libraries in place. |
 | Tor startup times out | Check connectivity, update obfs4 bridges if needed, and retry. You can use `--startup-timeout 10m`; the allowed maximum is `15m`. |
@@ -505,7 +543,7 @@ exist immediately after installation.
 | `tor.json` | Optional connection settings: mode, executable paths, timeout and bridge lines. Plain text; create it as described in [Tor setup](#tor-setup). |
 | `tor/` | Tor's working data. Temporary `.shadowtalk-run-*` directories contain per-run control files and, in bridge mode, Lyrebird state; normal shutdown removes those temporary directories. |
 | `profile-pending.json` | Recovery journal with profile metadata, encrypted seed and OS key ID for interrupted creation or upgrade. Normally removed when the operation completes. |
-| `.profile.lock`, `.contacts.lock`, `.messages.lock`, `tor/.shadowtalk.lock` | Coordinate access to profile files, contacts, history and the Tor directory. Their presence alone does not mean the app is still running; do not delete them to bypass a lock. |
+| `.profile.lock`, `.contacts.lock`, `.tor-config.lock`, `.messages.lock`, `tor/.shadowtalk.lock` | Coordinate access to profile files, contacts, history and the Tor directory. Their presence alone does not mean the app is still running; do not delete them to bypass a lock. |
 | OS credential store, outside this directory | The random key that decrypts the seed: macOS Keychain, Windows Credential Manager or Linux Secret Service. The service name is `ShadowTalk/seed-encryption/v1`; the entry's account is the `key_id` from `identity-seed.json`. |
 
 Invitation files such as `alice.invite` are created wherever you redirect command
@@ -548,16 +586,15 @@ trust model and protection limits in more detail.
 The first public alpha is **[v0.1.0-alpha.1](https://github.com/bacrehclb/ShadowTalk/releases/tag/v0.1.0-alpha.1)**.
 Its scope is one-to-one text chat with local history and delivery retries.
 
-The upcoming **[alpha.2](docs/releases/v0.1.0-alpha.2.md)** bundles Tor and Lyrebird.
-Its [packaging checks](https://github.com/bacrehclb/ShadowTalk/actions/runs/45964087325)
-passed on Linux, macOS and Windows, including installed runtime execution.
-This is preparation for release; the download above still points to alpha.1.
-When upgrading, keep your profile and remove `tor_binary` / `lyrebird_binary`
-from `tor.json` only if you want to switch from custom paths to the bundled tools.
+**[alpha.2](docs/releases/v0.1.0-alpha.2.md)** bundles Tor and Lyrebird.
+The current checkout prepares **[alpha.3](docs/releases/v0.1.0-alpha.3.md)** with
+an interactive menu. Alpha.3 has not been published yet. Profiles, keys, contacts
+and history keep their existing locations. Custom executable paths remain active;
+leave their fields empty in the new menu to switch to bundled executables.
 
 - Separate-device exchange and live Windows/Linux networking still need validation; successful automated tests do not establish those results.
 - Bridges may still be necessary with bundled Tor. The chat screen requires successful Tor startup, including to browse saved history.
-- Contacts and invitations are managed by CLI commands; changes to contacts require restarting chat. The interface is currently in Russian.
+- Contacts and invitations are managed by the menu (alpha.3 source) or CLI commands; changes require reopening chat. The interface is currently in Russian.
 - Group chats, attachments, read receipts, a desktop GUI and multi-device synchronization are not implemented. The macOS `.app` opens Terminal.
 - History has no automatic retention limit; the 200-record UI limit only bounds what is loaded on screen.
 
@@ -577,7 +614,7 @@ wrapper around this same executable.
 | [`internal/app`](internal/app) | Coordinates use cases: profile creation/recovery, contact import and network/history startup. [`StartDelivery`](internal/app/delivery.go) assembles the complete chat service and handles startup cleanup. |
 | [`internal/identity`](internal/identity) | Nickname rules, profiles, Ed25519 keys, seed encryption and separate onion/history key derivation. No filesystem or terminal UI. |
 | [`internal/contacts`](internal/contacts) | Invitation signing/validation, expiry, fingerprint confirmation and trusted contact rules. Persistence is provided separately. |
-| [`internal/tui`](internal/tui) | Bubble Tea profile and chat screens: keyboard input, contact selection, history paging and safe rendering. Calls services instead of issuing SQL or opening sockets. |
+| [`internal/tui`](internal/tui) | Bubble Tea menu, profile and chat screens: keyboard input, contact selection, history paging and safe rendering. Calls services instead of issuing SQL or opening sockets. |
 | [`internal/delivery`](internal/delivery) | Saves outgoing messages, schedules retries, handles acknowledgements and saves incoming messages before acknowledging them. Owns delivery behavior, not the terminal. |
 | [`internal/chat`](internal/chat) | Live dialogs over authenticated sessions: sending/receiving text, acknowledgements and application events. Does not make messages durable by itself. |
 | [`internal/peers`](internal/peers) | Connects to confirmed contacts, accepts trusted incoming peers, applies connection limits and manages session lifetimes. |
@@ -620,6 +657,7 @@ These links follow the checked-out branch or release tag. Most technical documen
 | [Security](docs/security.md) | Key storage, trust and limitations |
 | [Bundled Tor](docs/bundled-tor.md) | Automatic discovery, runtime locations, verified build downloads and updating the pin |
 | [Tor transport](docs/tor.md) | Runtime setup, lifecycle and validation status |
+| [macOS ↔ Docker test](docs/testing/macos-docker.md) | Manual exchange with a separate Linux profile and persistent keyring |
 | [Design decisions](docs/decisions) | Rationale behind the implementation |
 | [Installation](docs/install.md) | Packages, runtime dependencies and first launch |
 | [Releases](docs/releases.md) | Build process, dependency notices and publication |

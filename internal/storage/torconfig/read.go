@@ -1,5 +1,5 @@
-// Package torconfig reads a user-maintained, versioned connection file. It does
-// not write profiles or expose arbitrary Tor directives.
+// Package torconfig reads and writes a versioned connection file. It does not
+// expose arbitrary Tor directives.
 package torconfig
 
 import (

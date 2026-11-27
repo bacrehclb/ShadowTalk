@@ -3,14 +3,14 @@
 `ShadowTalk.app` is a macOS launcher for the existing terminal client. Double-click
 the app to open Terminal with a menu:
 
-1. **Профиль** — create or open your profile using the existing TUI.
-2. **Чат** — open chat with your saved contacts and Tor configuration.
-3. **Команды** — a command prompt for invitations, contacts and all CLI commands.
-0. **Выход** — finish the launcher session.
+The current source (alpha.3 preparation) opens the shared Go menu: profile,
+chat, invitation creation/import, contacts and Tor settings. Use arrow keys and
+Enter; Esc returns from a screen, Ctrl+C leaves the menu after active writes.
+Profile/chat return to the menu after shutting down. No Keychain or Tor access
+occurs until an action needs it. See the [menu walkthrough](../README.md#menu-workflow-alpha3-source--next-release).
 
-Esc / Ctrl+C in a TUI returns to the menu after the operation finishes. In the
-command prompt, `exit` or Ctrl+D returns to the menu. The menu itself does not
-open a profile, access Keychain or start Tor until you choose an action.
+When wrapping unchanged alpha.1/alpha.2 binaries, the launcher detects that they
+lack `menu` and retains the old numbered Profile / Chat / Commands / Exit menu.
 
 The app includes both Apple Silicon and Intel binaries. The launcher requires
 macOS 12 or newer; this is a build minimum, not a claim of testing on every
@@ -23,7 +23,7 @@ and `tor.json` keep their normal location in
 
 For a release image, use the [verified alpha bundle](#wrap-the-existing-alpha-without-rebuilding-its-go-binaries)
 instead: the source-build command below intentionally produces **dev**. Before
-packaging a release DMG, check `shadowtalk --version` in the app's command prompt.
+packaging a release DMG, run the bundled binary with `--version`.
 
 On macOS, install Go 1.26+, Python 3.13+ and Apple's Xcode Command Line Tools
 (or Xcode). From the repository root:
@@ -54,17 +54,10 @@ Open the result in Finder or run:
 open dist/macos-app/ShadowTalk.app
 ```
 
-In the app's **Команды** prompt, `shadowtalk` refers to the bundled binary.
-This function is local to that shell: it does not edit `.zshrc`, `.bashrc` or PATH.
-The prompt starts in your home directory; invitation files are created in the
-current working directory. For example:
-
-```sh
-shadowtalk --version
-shadowtalk invite create --ttl 24h > alice.invite
-shadowtalk contacts --help
-shadowtalk chat
-```
+The menu uses the bundled binary and keeps the normal profile location. You can
+create/copy/export invitations, import contacts and paste obfs4 bridge lines without
+opening a shell. A file export asks for a path and never overwrites an existing file.
+The app does not edit `.zshrc`, `.bashrc` or PATH.
 
 The profile and bilateral invitation steps are in the
 [English README](../README.md#usage) and [Russian README](../README.ru.md#использование).
@@ -100,8 +93,8 @@ documentation/notices come from the payload; `App Guide.md` describes this wrapp
    icon on your background.
 3. Build the DMG. Open it, drag the app into Applications and launch the copied
    app. Both CPU architectures are already inside this one app.
-4. Check the profile/chat/command menu and `shadowtalk --version` in the command
-   prompt before distributing the image.
+4. Check profile, invitations, Tor settings and chat from the menu, then run the
+   bundled binary with `--version` before distributing the image.
 
 The old automated `package.py macos --dmg-template ...` integration still expects
 a **PKG-based** Canvas project. Use Canvas directly for this new app layout.

@@ -47,6 +47,7 @@ class TerminalMenuTests(unittest.TestCase):
         binary = self.app / "Contents/MacOS/shadowtalk"
         binary.parent.mkdir()
         binary.write_text('#!/bin/bash\nprintf "%s\\n" "$*" >> "$CALL_LOG"\n'
+                          'if [[ "$1" == menu && "${LEGACY:-}" == 1 ]]; then exit 1; fi\n'
                           'if [[ "$1" == ui ]]; then exit 7; fi\n', encoding="utf-8")
         binary.chmod(0o755)
         for name in ("ShadowTalk.command", "terminal.bash"):
@@ -63,6 +64,7 @@ class TerminalMenuTests(unittest.TestCase):
         self.assertFalse((self.root / "calls.txt").exists())
 
     def test_relocated_menu_and_command_prompt_use_bundled_binary(self):
+        self.env["LEGACY"] = "1"
         import pty
         master, slave = pty.openpty()
         self.addCleanup(os.close, master)
@@ -105,9 +107,23 @@ class TerminalMenuTests(unittest.TestCase):
         send("0")
         self.assertEqual(process.wait(timeout=5), 0)
         self.assertEqual((self.root / "calls.txt").read_text().splitlines(),
-                         ["ui", "chat", "invite inspect --file received token.invite"])
+                         ["menu --help", "ui", "chat", "invite inspect --file received token.invite"])
         self.assertFalse((self.root / "GOTCHA").exists())
         self.assertFalse((self.root / "Library").exists())
+
+    def test_current_payload_opens_go_menu(self):
+        import pty
+        master, slave = pty.openpty()
+        try:
+            result = subprocess.run(self.command, env=self.env, cwd=self.root,
+                                    stdin=slave, stdout=slave, stderr=slave, timeout=5)
+        finally:
+            os.close(slave)
+            os.close(master)
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual((self.root / "calls.txt").read_text().splitlines(),
+                         ["menu --help", "menu"])
+        self.assertFalse((self.root / "GOTCHA").exists())
 
 
 if __name__ == "__main__":
