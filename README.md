@@ -19,7 +19,7 @@
   </p>
 
   <p><b>English</b> · <a href="README.ru.md">Русский</a></p>
-  <p><b><a href="https://github.com/bacrehclb/ShadowTalk/releases/tag/v0.1.0-alpha.2">Download v0.1.0-alpha.2</a></b> — macOS · Windows · Linux</p>
+  <p><b><a href="https://github.com/bacrehclb/ShadowTalk/releases/tag/v0.1.0-alpha.3">Download v0.1.0-alpha.3</a></b> — macOS · Windows · Linux</p>
   <p>
     <a href="#how-it-works">How it works</a> ·
     <a href="#quick-start">Quick start</a> ·
