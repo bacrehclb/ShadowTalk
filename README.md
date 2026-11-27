@@ -548,8 +548,15 @@ trust model and protection limits in more detail.
 The first public alpha is **[v0.1.0-alpha.1](https://github.com/bacrehclb/ShadowTalk/releases/tag/v0.1.0-alpha.1)**.
 Its scope is one-to-one text chat with local history and delivery retries.
 
+The upcoming **[alpha.2](docs/releases/v0.1.0-alpha.2.md)** bundles Tor and Lyrebird.
+Its [packaging checks](https://github.com/bacrehclb/ShadowTalk/actions/runs/45964087325)
+passed on Linux, macOS and Windows, including installed runtime execution.
+This is preparation for release; the download above still points to alpha.1.
+When upgrading, keep your profile and remove `tor_binary` / `lyrebird_binary`
+from `tor.json` only if you want to switch from custom paths to the bundled tools.
+
 - Separate-device exchange and live Windows/Linux networking still need validation; successful automated tests do not establish those results.
-- Bundled Tor is included in the upcoming alpha.2; alpha.1 still requires manual installation. Bridges may still be necessary. The chat screen requires successful Tor startup, including to browse saved history.
+- Bridges may still be necessary with bundled Tor. The chat screen requires successful Tor startup, including to browse saved history.
 - Contacts and invitations are managed by CLI commands; changes to contacts require restarting chat. The interface is currently in Russian.
 - Group chats, attachments, read receipts, a desktop GUI and multi-device synchronization are not implemented. The macOS `.app` opens Terminal.
 - History has no automatic retention limit; the 200-record UI limit only bounds what is loaded on screen.

@@ -6,6 +6,63 @@ those same archives with native installers: Apple's `pkgbuild`/`productbuild`
 and `hdiutil` on macOS, Inno Setup 6 on Windows. Python 3.13 is a build-time
 dependency only; end users do not need it or Go.
 
+## Next release: v0.1.0-alpha.2
+
+The bundled-Tor implementation at `c8ae5725aa663865d1c43fda34f927d95ddf9828`
+passed the manually dispatched [Packages run](https://github.com/bacrehclb/ShadowTalk/actions/runs/45964087325)
+on 2026-11-27. Linux, macOS, Windows and final artifact collection succeeded.
+The exact scope and remaining platform limitations are in the
+[alpha.2 notes](releases/v0.1.0-alpha.2.md). This snapshot is evidence for packaging;
+it is not the tagged alpha.2 payload and did not run the separate Go **Tests** workflow.
+
+From the repository root, finish the release in this order:
+
+1. Commit the release documentation on `dev` without `[skip ci]`, push it, and
+   open a PR with **base `main` / compare `dev`**. Wait for **Tests** and
+   **Packages** to pass before merging. Use a normal merge commit without a
+   skip directive. Keep the existing alpha.1 tag and assets unchanged.
+2. Update local `main`, require a clean working tree, then create a new tag:
+
+   ```sh
+   git switch main
+   git pull --ff-only origin main
+   git status
+   git tag -a v0.1.0-alpha.2 -m "ShadowTalk v0.1.0-alpha.2"
+   git push origin v0.1.0-alpha.2
+   ```
+
+3. Wait for **Alpha release** to pass. It validates the tag's source, runs the
+   three-OS test matrix, builds packages and creates an unpublished prerelease.
+   Download `shadowtalk-packages` from that exact successful run. Do not use
+   the earlier snapshot artifact. With `RUN_ID` replaced by its numeric ID and
+   new, unused output directories:
+
+   ```sh
+   gh run download RUN_ID --repo bacrehclb/ShadowTalk \
+     --name shadowtalk-packages --dir dist/alpha2-input
+   python3 packaging/macos_app.py --bundle dist/alpha2-input \
+     --output dist/macos-app-alpha2/ShadowTalk.app
+   ```
+
+4. Replace the app in the maintainer's DMG Canvas project with that exact app.
+   Build `shadowtalk_0.1.0-alpha.2_darwin_universal.dmg`. Check the app copied
+   from the final image: its version must be `0.1.0-alpha.2`, its payload commit
+   must match the tag, and its menu and bundled Tor must work. Preserve the
+   custom Finder layout. A source-built app reporting `dev` is not a release payload.
+5. In a separate local staging directory, use `release.py prepare` with the
+   alpha.2 tag/commit and full tagged bundle. Replace the two architecture DMGs
+   with the verified universal DMG, then regenerate `checksums.txt` using
+   `package.py checksums`. Follow the universal-DMG procedure below with
+   **alpha.2 filenames** and new staging paths. Do not change the source CI bundle.
+6. While the GitHub release is still a draft, upload the universal DMG and new
+   public checksum manifest, remove the two PKG-based DMGs, and verify the final
+   eight assets and their hashes. Review the release notes, then publish as a
+   **prerelease**, not Latest. After publication, update both READMEs' download
+   links, version-status paragraphs and `docs/install.md` to point to alpha.2.
+
+The custom DMG and final published payload still need these checks even when
+snapshot packaging is green. An alpha.1 installation is not validation of alpha.2.
+
 ## Structure
 
 ```text
@@ -188,11 +245,11 @@ ARM64 Linux and the non-native macOS architecture are cross-built. RPM native
 installation and interactive Windows installer appearance need separate checks.
 Neither workflow establishes live messaging between separate computers.
 
-## Publishing the first alpha
+## First-alpha publishing record and reusable staging procedure
 
 ### Prepare the main branch
 
-Current maintenance is directly on `main`. A normal push runs tests and snapshot
+The first alpha was prepared directly on `main`. A normal push runs tests and snapshot
 packaging, but does not create a release. A commit message containing `[skip ci]`
 skips those push workflows; this is not evidence that checks passed. Only pushing
 a new alpha tag starts the draft flow. The first tag `v0.1.0-alpha.1` already
