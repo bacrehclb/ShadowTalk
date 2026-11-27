@@ -143,6 +143,11 @@ func decode(data []byte, base string) (Settings, error) {
 	if decoder.Decode(&extra) != io.EOF || !seen["version"] || !seen["mode"] {
 		return s, ErrInvalid
 	}
+	// An omitted executable is selected by application wiring (bundle, then
+	// PATH). Explicit relative JSON paths are already absolute, so remain exact.
+	if s.Connection.Mode == "obfs4" && !seen["lyrebird_binary"] {
+		s.Connection.LyrebirdBinary = "lyrebird"
+	}
 	if s.Connection.Validate() != nil {
 		return s, ErrInvalid
 	}

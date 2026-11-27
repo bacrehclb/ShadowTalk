@@ -4,6 +4,7 @@ project_name: shadowtalk
 before:
   hooks:
     - python3 packaging/notices.py
+    - python3 packaging/tor_bundle.py
 
 builds:
   - id: shadowtalk
@@ -34,6 +35,8 @@ archives:
       - README.ru.md
       - docs/*.md
       - docs/**/*.md
+      - 'bin/tor-runtime/{{ .Os }}-{{ .Arch }}/**/*'
+      - 'bin/tor-runtime/{{ .Os }}-{{ .Arch }}/runtime.json'
 
 nfpms:
   - id: linux
@@ -41,11 +44,14 @@ nfpms:
     file_name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     homepage: https://github.com/bacrehclb/ShadowTalk
     maintainer: bacrehclb
-    description: Terminal P2P messenger using Tor onion services. Requires Tor and an unlocked Secret Service.
+    description: Terminal P2P messenger with bundled Tor and Lyrebird. Requires an unlocked Secret Service.
     license: MIT
     formats: [deb, rpm]
     bindir: /usr/bin
     contents:
+      - src: 'bin/tor-runtime/linux-{{ .Arch }}/'
+        dst: '/usr/lib/shadowtalk/tor-runtime/linux-{{ .Arch }}'
+        type: tree
       - src: LICENSE
         dst: /usr/share/doc/shadowtalk/LICENSE
       - src: bin/notices/THIRD_PARTY_NOTICES.txt

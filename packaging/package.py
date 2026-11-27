@@ -15,6 +15,8 @@ import tarfile
 import tempfile
 import zipfile
 
+import tor_bundle
+
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_DMGCANVAS = Path("/Applications/DMG Canvas.app/Contents/Resources/dmgcanvas")
 NOTICES = "THIRD_PARTY_NOTICES.txt"
@@ -80,6 +82,9 @@ def macos(dist, version, template=None, dmgcanvas=DEFAULT_DMGCANVAS):
             binary.parent.mkdir(parents=True)
             shutil.copy2(work / "archive/shadowtalk", binary)
             binary.chmod(0o755)
+            runtime = work / "archive/bin/tor-runtime" / f"darwin-{arch}"
+            tor_bundle.verify(runtime, f"darwin-{arch}")
+            shutil.copytree(runtime, payload / "usr/local/lib/shadowtalk/tor-runtime" / f"darwin-{arch}")
             docs = payload / "usr/local/share/doc/shadowtalk"
             docs.mkdir(parents=True)
             for filename in ("LICENSE", NOTICES, "README.md", "README.ru.md"):
@@ -132,6 +137,41 @@ def windows(dist, version, iscc):
             f"/O{output}", ROOT / "packaging/windows/shadowtalk.iss")
 
 
+def sign_macos_archives(dist, version):
+    """Finalize portable Mac runtimes on a Mac before installers/checksums."""
+    if sys.platform != "darwin":
+        raise RuntimeError("macOS signing requires a macOS host")
+    replacements = {}
+    with tempfile.TemporaryDirectory(prefix=".macos-sign-", dir=dist) as temporary:
+        work = Path(temporary)
+        staged = []
+        for arch in ("arm64", "amd64"):
+            archive = dist / f"shadowtalk_{version}_darwin_{arch}.tar.gz"
+            original = tor_bundle.digest(archive)
+            source = work / arch
+            unpack(archive, source)
+            tor_bundle.sign_macos(source / "bin/tor-runtime" / f"darwin-{arch}", f"darwin-{arch}")
+            output = work / archive.name
+            with tarfile.open(output, "w:gz") as bundle:
+                for path in sorted(source.rglob("*")):
+                    bundle.add(path, arcname=path.relative_to(source).as_posix(), recursive=False)
+            replacements[original] = tor_bundle.digest(output)
+            staged.append((output, archive))
+        # Cask hashes must refer to finalized archives, not pre-signing inputs.
+        casks = []
+        for cask in dist.rglob("shadowtalk.rb"):
+            text = cask.read_text(encoding="utf-8")
+            for old, new in replacements.items():
+                if text.count(old) != 1:
+                    raise ValueError("cask must reference each original macOS archive exactly once")
+                text = text.replace(old, new)
+            casks.append((cask, text))
+        for output, archive in staged:
+            os.replace(output, archive)
+        for cask, text in casks:
+            cask.write_text(text, encoding="utf-8")
+
+
 def checksums(directory):
     # Recompute after ALL native packaging jobs. Never reuse a checksum for a
     # binary that was subsequently wrapped, signed, or otherwise changed.
@@ -171,10 +211,14 @@ def verify(dist):
                 raise ValueError(f"missing distribution files in {archive.name}")
             if (work / "unpacked" / NOTICES).read_bytes() != notices:
                 raise ValueError(f"third-party notices differ in {archive.name}")
+            runtime = work / "unpacked/bin/tor-runtime" / f"{target_os}-{arch}"
+            tor_bundle.verify(runtime, f"{target_os}-{arch}")
             if any(name not in {executable, "LICENSE", NOTICES, "README.md", "README.ru.md"}
-                   and not (name.startswith("docs/") and name.endswith(".md")) for name in names):
+                   and not (name.startswith("docs/") and name.endswith(".md"))
+                   and not name.startswith(f"bin/tor-runtime/{target_os}-{arch}/") for name in names):
                 raise ValueError(f"unexpected distribution files in {archive.name}")
             if (target_os, arch) == (host_os, host_arch):
+                tor_bundle.smoke(runtime, f"{target_os}-{arch}")
                 for flag in ("--version", "--help"):
                     result = subprocess.run(
                         [str(work / "unpacked" / executable), "--profile-dir", str(work / "profile"), flag],
@@ -189,7 +233,7 @@ def verify(dist):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("macos", "windows", "checksums", "verify"))
+    parser.add_argument("command", choices=("macos", "sign-macos", "windows", "checksums", "verify"))
     parser.add_argument("--dist", type=Path, default=ROOT / "dist")
     parser.add_argument("--iscc", default="ISCC.exe")
     parser.add_argument("--dmg-template", type=Path, help="external DMG Canvas 4 project (macos only)")
@@ -217,7 +261,9 @@ def main():
     version = json.loads((dist / "metadata.json").read_text(encoding="utf-8"))["version"]
     if not re.fullmatch(r"\d+\.\d+\.\d+(?:[-+][a-zA-Z0-9.-]+)?", version):
         raise ValueError("unexpected GoReleaser version")
-    if args.command == "macos":
+    if args.command == "sign-macos":
+        sign_macos_archives(dist, version)
+    elif args.command == "macos":
         macos(dist, version, template, dmgcanvas)
     else:
         windows(dist, version, args.iscc)

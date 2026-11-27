@@ -40,6 +40,7 @@ Source: "{#SourceDir}\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\THIRD_PARTY_NOTICES.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\README*.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\docs\*"; DestDir: "{app}\docs"; Flags: ignoreversion recursesubdirs
+Source: "{#SourceDir}\bin\tor-runtime\*"; DestDir: "{app}\bin\tor-runtime"; Flags: ignoreversion recursesubdirs
 
 [Icons]
 Name: "{group}\ShadowTalk terminal"; Filename: "{cmd}"; Parameters: "/K """"{app}\shadowtalk.exe"" --help"""; WorkingDir: "{app}"

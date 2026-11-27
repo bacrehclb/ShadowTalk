@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	"github.com/bacrehclb/ShadowTalk/internal/storage/torconfig"
+	"github.com/bacrehclb/ShadowTalk/internal/torbundle"
 	"github.com/bacrehclb/ShadowTalk/internal/transport/tor"
 	"github.com/bacrehclb/ShadowTalk/internal/tui"
 )
@@ -19,6 +21,14 @@ type chatNetworkFlags struct {
 }
 
 func (f chatNetworkFlags) options(directory string) (tor.Options, error) {
+	executable, err := os.Executable()
+	if err != nil {
+		return tor.Options{}, torbundle.ErrIncomplete
+	}
+	return f.optionsFor(directory, executable, runtime.GOOS, runtime.GOARCH)
+}
+
+func (f chatNetworkFlags) optionsFor(directory, executable, targetOS, arch string) (tor.Options, error) {
 	path := f.config
 	if path == "" {
 		path = filepath.Join(directory, torconfig.FileName)
@@ -39,7 +49,25 @@ func (f chatNetworkFlags) options(directory string) (tor.Options, error) {
 	if f.timeoutSet {
 		saved.StartTimeout = f.timeout
 	}
-	return tor.Options{BinaryPath: saved.BinaryPath, DataDir: filepath.Join(directory, "tor"), StartTimeout: saved.StartTimeout, Connection: saved.Connection}, nil
+	autoTor := !f.binarySet && saved.BinaryPath == "tor"
+	autoLyrebird := saved.Connection.Mode == "obfs4" && saved.Connection.LyrebirdBinary == "lyrebird"
+	libraryDir := ""
+	if autoTor || autoLyrebird {
+		paths, err := torbundle.Locate(executable, targetOS, arch)
+		if err != nil {
+			return tor.Options{}, err
+		}
+		if autoTor {
+			saved.BinaryPath = paths.Tor
+			if targetOS == "linux" && filepath.IsAbs(paths.Tor) {
+				libraryDir = filepath.Dir(paths.Tor)
+			}
+		}
+		if autoLyrebird {
+			saved.Connection.LyrebirdBinary = paths.Lyrebird
+		}
+	}
+	return tor.Options{BinaryPath: saved.BinaryPath, LibraryDir: libraryDir, DataDir: filepath.Join(directory, "tor"), StartTimeout: saved.StartTimeout, Connection: saved.Connection}, nil
 }
 
 func torProgressText(p tor.Progress) string {
@@ -91,6 +119,8 @@ func chatTorProgress(p tor.Progress) tui.ChatStartup {
 
 func torConnectionError(err error) string {
 	switch {
+	case errors.Is(err, torbundle.ErrIncomplete):
+		return "Комплект Tor повреждён или не подходит этому процессору. Переустановите ShadowTalk или укажите свои пути Tor/Lyrebird в настройках."
 	case errors.Is(err, torconfig.ErrUnsafeFile):
 		return "Небезопасный tor.json: нужен обычный файл; на Unix задайте права 0600."
 	case errors.Is(err, torconfig.ErrVersion):

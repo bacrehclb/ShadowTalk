@@ -23,9 +23,10 @@ it is not a publisher signature.
 ## Requirements
 
 - No Go compiler is needed to use a packaged binary.
-- Tor is installed separately. For obfs4, install Lyrebird as well. Use the
-  [Tor Expert Bundle](https://download.torproject.org/tor/) for your OS/CPU and
-  follow [the connection guide](tor.md). Keep the bundle's supporting libraries.
+- Builds for the upcoming alpha.2 include Tor and Lyrebird. The published alpha.1
+  requires a separate [Tor Expert Bundle](https://download.torproject.org/tor/).
+  Follow [the connection guide](tor.md); see [bundled Tor](bundled-tor.md) for
+  automatic discovery and upgrading existing configurations.
 - An accessible OS credential store: Keychain on macOS, Credential Manager on
   Windows, or an unlocked Secret Service collection over user D-Bus on Linux.
 - A real terminal, at least 60 columns × 20 rows for chat.
@@ -120,8 +121,8 @@ shadowtalk --version
 
 Both install `/usr/bin/shadowtalk` with documentation under
 `/usr/share/doc/shadowtalk`. They do not configure a service, start Tor or install
-a keyring provider. Use your distribution's package manager for those runtime
-dependencies; an unlocked desktop login session is the simplest starting point.
+a keyring provider. Use your distribution's package manager for a Secret Service
+provider if needed; an unlocked desktop login session is the simplest starting point.
 Remove with `sudo apt remove shadowtalk` or `sudo dnf remove shadowtalk`.
 Profiles and OS credentials are outside the package and remain intact.
 
@@ -159,4 +160,6 @@ download. Find both files in the extracted portable archive, or after installing
   `%LOCALAPPDATA%\Programs\ShadowTalk\`.
 - Linux DEB/RPM: `/usr/share/doc/shadowtalk/`.
 
-Tor and Lyrebird are installed separately and provide their own license texts.
+For alpha.2 builds, Tor and Lyrebird license texts are included under each
+bundled runtime's `docs/` directory; see [runtime locations](bundled-tor.md#installed-files).
+Alpha.1 uses a separate Tor installation with its own license texts.
